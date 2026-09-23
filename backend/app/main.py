@@ -51,13 +51,15 @@ def run_migrations_and_seed():
 
                 if str(scripts_dir) not in sys.path and scripts_dir.exists():
                     sys.path.insert(0, str(scripts_dir))
+                if str(base_dir) not in sys.path and base_dir.exists():
+                    sys.path.insert(0, str(base_dir))
                 try:
                     from seed_demo import seed_demo_data
 
                     seed_demo_data()
                     logger.info("Demo data seeded successfully.")
-                except ImportError:
-                    logger.warning("seed_demo module not found, skipping seed.")
+                except ImportError as ie:
+                    logger.warning(f"seed_demo module not found, skipping seed: {ie}")
     except Exception as exc:
         logger.warning(f"Auto-seed check: {exc}")
 
