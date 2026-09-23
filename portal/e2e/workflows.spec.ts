@@ -258,16 +258,15 @@ test.describe("Core Workflows & API Integration", () => {
     const dialog = page.locator('[data-testid="reject-dialog"]');
     await expect(dialog).toBeVisible();
 
-    // 3. Assert submit button is disabled without reason
+    // 3. Assert submitting without reason displays required error message
     const confirmRejectBtn = page.locator('[data-testid="btn-confirm-reject"]');
-    await expect(confirmRejectBtn).toBeDisabled();
+    await confirmRejectBtn.click();
+    const rejectError = page.locator('[data-testid="reject-error"]');
+    await expect(rejectError).toBeVisible();
 
     // 4. Type a rejection reason
     const reasonInput = page.locator('[data-testid="input-reject-reason"]');
     await reasonInput.fill("Slip QR code is unreadable and amount does not match order");
-
-    // 5. Assert button becomes enabled
-    await expect(confirmRejectBtn).toBeEnabled();
 
     // 6. Click submit
     await confirmRejectBtn.click();
