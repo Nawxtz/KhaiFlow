@@ -1,0 +1,52 @@
+{
+  "carrier_id": "thailand_post",
+  "carrier_name": "Thailand Post EMS",
+  "fields": [
+    {
+      "source": "order_id",
+      "header": "EMS Reference",
+      "transform": "identity"
+    },
+    {
+      "source": "receiver_name",
+      "header": "Consignee Name",
+      "transform": "identity"
+    },
+    {
+      "source": "phone",
+      "header": "Contact Number",
+      "transform": "phone_format"
+    },
+    {
+      "source": "full_address",
+      "header": "Delivery Address",
+      "transform": "identity"
+    },
+    {
+      "source": "postcode",
+      "header": "Postcode",
+      "transform": "identity"
+    },
+    {
+      "source": "sku",
+      "header": "Item Code",
+      "transform": "identity"
+    },
+    {
+      "source": "qty",
+      "header": "Item Count",
+      "transform": "identity"
+    },
+    {
+      "source": "total",
+      "header": "Collection Amount",
+      "transform": "identity"
+    },
+    {
+      "source": "tracking_note",
+      "header": "Shipping Notes",
+      "transform": "identity"
+    }
+  ],
+  "encoding": "utf-8-sig"
+}

@@ -1,0 +1,67 @@
+{
+  "carrier_id": "kerry",
+  "carrier_name": "Kerry Express Thailand",
+  "fields": [
+    {
+      "source": "receiver_name",
+      "header": "Recipient Name",
+      "transform": "identity"
+    },
+    {
+      "source": "phone",
+      "header": "Mobile Phone",
+      "transform": "phone_format"
+    },
+    {
+      "source": "full_address",
+      "header": "Address",
+      "transform": "identity"
+    },
+    {
+      "source": "subdistrict",
+      "header": "Sub-District",
+      "transform": "identity"
+    },
+    {
+      "source": "district",
+      "header": "District",
+      "transform": "identity"
+    },
+    {
+      "source": "province",
+      "header": "Province",
+      "transform": "identity"
+    },
+    {
+      "source": "postcode",
+      "header": "Postal Code",
+      "transform": "identity"
+    },
+    {
+      "source": "order_id",
+      "header": "Order No",
+      "transform": "identity"
+    },
+    {
+      "source": "total",
+      "header": "COD Amount",
+      "transform": "identity"
+    },
+    {
+      "source": "sku",
+      "header": "SKU",
+      "transform": "identity"
+    },
+    {
+      "source": "qty",
+      "header": "Quantity",
+      "transform": "identity"
+    },
+    {
+      "source": "tracking_note",
+      "header": "Remark",
+      "transform": "identity"
+    }
+  ],
+  "encoding": "utf-8-sig"
+}
