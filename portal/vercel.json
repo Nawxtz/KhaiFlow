@@ -2,9 +2,6 @@
   "framework": "nextjs",
   "buildCommand": "npm run build",
   "outputDirectory": ".next",
-  "env": {
-    "NEXT_PUBLIC_API_BASE_URL": "@api_base_url"
-  },
   "headers": [
     {
       "source": "/(.*)",
