@@ -1,15 +1,16 @@
-from contextlib import asynccontextmanager
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from alembic import command
+
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from alembic import command
 from app.api import api_router
-from app.core.database import Base, engine, SessionLocal
+from app.core.database import Base, SessionLocal, engine
 
 logger = logging.getLogger(__name__)
 

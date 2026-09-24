@@ -10,7 +10,7 @@ Idempotent: Uses INSERT ... ON CONFLICT DO NOTHING to avoid duplicate data.
 
 import json
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -22,12 +22,12 @@ if str(backend_path) not in sys.path:
     sys.path.insert(0, str(backend_path))
 
 from app.core.config import settings
-from app.core.database import engine, SessionLocal
+from app.core.database import SessionLocal, engine
 
 
 def seed_demo_data() -> None:
     shop_id = settings.DEFAULT_SHOP_ID or "default"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     print("=" * 60)
     print("KhaiFlow - Demo Data Seeder")
@@ -326,7 +326,8 @@ def seed_demo_data() -> None:
 
         print("\n2. Address Book Profiles (2 profiles):")
         for addr in addresses:
-            addr_data = json.loads(addr["address_json"])
+            addr_json_raw = str(addr["address_json"])
+            addr_data = json.loads(addr_json_raw)
             print(f"   - {addr['receiver_name']} ({addr['label']}) | {addr['phone']} | {addr_data.get('sub_district')}, {addr_data.get('district')}, {addr_data.get('province')} {addr_data.get('zipcode')}")
 
         print("\n3. Demo Orders (3 orders):")
