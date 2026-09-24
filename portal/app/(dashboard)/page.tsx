@@ -119,6 +119,20 @@ export default function OrderDashboardPage() {
           >
             {isExporting ? "Exporting..." : "Export Kerry CSV"}
           </button>
+          <button
+            type="button"
+            data-testid="btn-export-thailand-post"
+            disabled={user?.role !== "owner" || isExporting}
+            onClick={() => handleExport("thailand_post")}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md text-xs font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title={
+              user?.role !== "owner"
+                ? "Staff role cannot trigger carrier export. Owner permission required."
+                : "Export Thailand Post CSV"
+            }
+          >
+            {isExporting ? "Exporting..." : "Export Thailand Post CSV"}
+          </button>
         </div>
       </div>
 
