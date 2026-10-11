@@ -27,6 +27,24 @@ def get_line_client() -> LineClient:
     return line_client
 
 
+@router.get("/debug")
+async def debug_endpoint(db: Session = Depends(get_db)):
+    import traceback
+    try:
+        from app.schemas.webhook import LineMessage, LineSource
+        event = LineWebhookEvent(
+            webhookEventId="debug-" + str(hash("debug")),
+            type="message",
+            source=LineSource(type="user", userId="U12345"),
+            message=LineMessage(type="text", text="ดูสินค้า"),
+            replyToken="mock_token",
+        )
+        await _process_single_event(event, db, line_client)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "traceback": traceback.format_exc()}
+
+
 @router.post("/webhook", status_code=status.HTTP_200_OK)
 async def line_webhook(
     request: Request,
