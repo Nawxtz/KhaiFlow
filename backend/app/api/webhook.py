@@ -64,7 +64,13 @@ async def line_webhook(
 
     # 3. Process events
     for event in payload.events:
-        await _process_single_event(event, db, client)
+        try:
+            await _process_single_event(event, db, client)
+        except Exception as e:
+            import traceback
+            err_trace = traceback.format_exc()
+            logger.error(f"Error processing event: {err_trace}")
+            return {"status": "error", "error": str(e), "traceback": err_trace}
 
     return {"status": "ok"}
 
