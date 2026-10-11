@@ -32,8 +32,18 @@ def run_migrations_and_seed():
         if ini_path:
             logger.info(f"Running Alembic migrations from {ini_path}...")
             alembic_cfg = Config(str(ini_path))
-            command.upgrade(alembic_cfg, "head")
-            logger.info("Alembic migrations completed successfully.")
+            try:
+                command.upgrade(alembic_cfg, "head")
+                logger.info("Alembic migrations completed successfully.")
+            except Exception as e_up:
+                if "already exists" in str(e_up).lower():
+                    logger.warning("Tables already exist in database, stamping Alembic revision to head...")
+                    try:
+                        command.stamp(alembic_cfg, "head")
+                    except Exception as e_stamp:
+                        logger.warning(f"Alembic stamp warning: {e_stamp}")
+                else:
+                    raise e_up
         else:
             logger.info("alembic.ini not found, creating tables via Base.metadata...")
             Base.metadata.create_all(bind=engine)
