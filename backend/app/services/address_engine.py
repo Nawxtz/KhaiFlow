@@ -84,22 +84,29 @@ def get_parser() -> Any:
     if _PARSER_INSTANCE is not None:
         return _PARSER_INSTANCE
 
-    # Attempt to load root ThaiSmartAddress v7.0 parser
-    root_dir = Path(__file__).resolve().parent.parent.parent.parent
-    if str(root_dir) not in sys.path:
-        sys.path.insert(0, str(root_dir))
+    # Attempt to load ThaiSmartAddress v7.0 parser from backend or repo root
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent,
+        Path(__file__).resolve().parent.parent.parent.parent,
+    ]
+    for d in candidates:
+        if str(d) not in sys.path and d.exists():
+            sys.path.insert(0, str(d))
 
     try:
         from geo_engine import GeoDatabase
         from parser import SmartAddressParser
 
-        csv_path = root_dir / "data" / "thai_address_full.csv"
+        csv_path = next(
+            (d / "data" / "thai_address_full.csv" for d in candidates if (d / "data" / "thai_address_full.csv").exists()),
+            None,
+        )
         geo = GeoDatabase()
-        if csv_path.exists():
+        if csv_path:
             geo.load_csv(str(csv_path))
             _load_zipcode_cache(geo)
         _PARSER_INSTANCE = SmartAddressParser(geo)
-        logger.info("ThaiSmartAddress local parser initialized successfully")
+        logger.info("ThaiSmartAddress local parser initialized successfully from %s", csv_path)
     except Exception as exc:
         logger.warning("Failed to load root parser, using fallback: %s", exc)
         _PARSER_INSTANCE = _FallbackAddressParser()
@@ -123,9 +130,15 @@ def _ensure_zipcode_cache() -> None:
     global _ZIPCODE_TO_PROVINCES
     if _ZIPCODE_TO_PROVINCES:
         return
-    root_dir = Path(__file__).resolve().parent.parent.parent.parent
-    csv_path = root_dir / "data" / "thai_address_full.csv"
-    if csv_path.exists():
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent,
+        Path(__file__).resolve().parent.parent.parent.parent,
+    ]
+    csv_path = next(
+        (d / "data" / "thai_address_full.csv" for d in candidates if (d / "data" / "thai_address_full.csv").exists()),
+        None,
+    )
+    if csv_path:
         import csv
 
         with open(csv_path, encoding="utf-8") as f:
@@ -237,6 +250,9 @@ def parse_raw_address(raw_text: str) -> ParsedAddress:
     province = clean(province)
     zipcode = clean(zipcode)
 
+    if receiver and street and street.startswith(receiver):
+        street = clean(street[len(receiver):].strip(" ,-\t\n"))
+
     # Check for contradictions
     contradiction = check_contradiction(zipcode, province)
     has_contradiction = contradiction is not None
@@ -278,8 +294,11 @@ def format_address_dry_run_summary(
     """Build the localized dry-run summary message text."""
     receiver = fields.get("receiver_name", "-")
     phone = fields.get("phone", "-")
+    street = fields.get("street")
+    if receiver and receiver != "-" and street and street.startswith(receiver):
+        street = street[len(receiver):].strip(" ,-\t\n")
     addr_parts = [
-        fields.get("street"),
+        street,
         fields.get("subdistrict"),
         fields.get("district"),
         fields.get("province"),
