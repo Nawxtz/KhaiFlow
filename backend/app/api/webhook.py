@@ -32,11 +32,12 @@ async def debug_endpoint(db: Session = Depends(get_db)):
     import traceback
     try:
         from app.schemas.webhook import LineMessage, LineSource
+        from app.services.i18n import get_text
         event = LineWebhookEvent(
             webhookEventId="debug-" + str(hash("debug")),
             type="message",
             source=LineSource(type="user", userId="U12345"),
-            message=LineMessage(type="text", text="ดูสินค้า"),
+            message=LineMessage(type="text", text=get_text("menu_browse", "th")),
             replyToken="mock_token",
         )
         await _process_single_event(event, db, line_client)
