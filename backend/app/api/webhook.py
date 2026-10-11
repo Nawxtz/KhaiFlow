@@ -41,38 +41,38 @@ async def line_webhook(
     3. Safely ignores unsupported event types.
     4. Handles message and postback events with locale-keyed replies.
     """
-    body = await request.body()
-
-    # 1. Validate signature
-    if not x_line_signature or not client.validate_signature(body, x_line_signature):
-        logger.warning("Rejected LINE webhook with invalid signature")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid LINE signature",
-        )
-
-    # 2. Parse payload
     try:
-        payload_data = json.loads(body.decode("utf-8"))
-        payload = LineWebhookPayload(**payload_data)
-    except Exception as e:
-        logger.error("Failed to parse LINE webhook payload: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Malformed webhook payload",
-        ) from e
+        body = await request.body()
 
-    # 3. Process events
-    for event in payload.events:
+        # 1. Validate signature
+        if not x_line_signature or not client.validate_signature(body, x_line_signature):
+            logger.warning("Rejected LINE webhook with invalid signature")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid LINE signature",
+            )
+
+        # 2. Parse payload
         try:
-            await _process_single_event(event, db, client)
+            payload_data = json.loads(body.decode("utf-8"))
+            payload = LineWebhookPayload(**payload_data)
         except Exception as e:
-            import traceback
-            err_trace = traceback.format_exc()
-            logger.error(f"Error processing event: {err_trace}")
-            return {"status": "error", "error": str(e), "traceback": err_trace}
+            logger.error("Failed to parse LINE webhook payload: %s", e)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Malformed webhook payload",
+            ) from e
 
-    return {"status": "ok"}
+        # 3. Process events
+        for event in payload.events:
+            await _process_single_event(event, db, client)
+
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except BaseException as e:
+        import traceback
+        return {"status": "crashed", "error": str(e), "tb": traceback.format_exc()}
 
 
 async def _process_single_event(
