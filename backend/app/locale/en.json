@@ -14,6 +14,7 @@
   "btn_view_details": "View Details",
   "in_stock": "In Stock ({count} available)",
   "out_of_stock": "Out of Stock",
+  "catalog_empty": "Sorry, no products are currently available.",
   "price_format": "฿{price}",
   "carousel_title": "Featured Products",
   "chat_bar_menu": "Main Menu",

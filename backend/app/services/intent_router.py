@@ -475,8 +475,13 @@ async def handle_browse(
         .all()
     )
     if reply_token:
-        flex_msg = build_product_flex_message(items, lang=lang)
-        client.reply_message(reply_token, [flex_msg])
+        if not items:
+            client.reply_message(
+                reply_token, [{"type": "text", "text": get_text("catalog_empty", lang)}]
+            )
+        else:
+            flex_msg = build_product_flex_message(items, lang=lang)
+            client.reply_message(reply_token, [flex_msg])
 
 
 async def handle_select_product(

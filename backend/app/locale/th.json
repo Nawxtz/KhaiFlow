@@ -14,6 +14,7 @@
   "btn_view_details": "ดูรายละเอียด",
   "in_stock": "มีสินค้า ({count} ชิ้น)",
   "out_of_stock": "สินค้าหมด",
+  "catalog_empty": "ขออภัย ขณะนี้ยังไม่มีรายการสินค้าพร้อมจำหน่าย",
   "price_format": "฿{price}",
   "carousel_title": "รายการสินค้าแนะนำ",
   "chat_bar_menu": "เมนูหลัก",

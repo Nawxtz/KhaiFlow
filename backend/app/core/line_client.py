@@ -63,6 +63,7 @@ class LineClient:
             from linebot.v3.messaging import (
                 ApiClient,
                 Configuration,
+                Message,
                 MessagingApi,
                 ReplyMessageRequest,
             )
@@ -70,9 +71,12 @@ class LineClient:
             config = Configuration(access_token=self.channel_access_token)
             with ApiClient(config) as api_client:
                 messaging_api = MessagingApi(api_client)
+                formatted_messages = [
+                    Message.from_dict(m) if isinstance(m, dict) else m for m in messages
+                ]
                 request = ReplyMessageRequest(
                     replyToken=reply_token,
-                    messages=messages,
+                    messages=formatted_messages,
                 )
                 messaging_api.reply_message(request)
         except Exception as e:
@@ -102,6 +106,7 @@ class LineClient:
             from linebot.v3.messaging import (
                 ApiClient,
                 Configuration,
+                Message,
                 MessagingApi,
                 PushMessageRequest,
             )
@@ -109,9 +114,12 @@ class LineClient:
             config = Configuration(access_token=self.channel_access_token)
             with ApiClient(config) as api_client:
                 messaging_api = MessagingApi(api_client)
+                formatted_messages = [
+                    Message.from_dict(m) if isinstance(m, dict) else m for m in messages
+                ]
                 request = PushMessageRequest(
                     to=to,
-                    messages=messages,
+                    messages=formatted_messages,
                 )
                 messaging_api.push_message(request)
         except Exception as e:
