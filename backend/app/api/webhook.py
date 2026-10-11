@@ -112,6 +112,7 @@ async def _process_single_event(
         logger.info("Ignored unsupported event type: %s (event_id=%s)", event.type, event_id)
         return
 
-    # Dispatch to intent router for guided ordering flow
-
-    await dispatch_event(event, db, client)
+    try:
+        await dispatch_event(event, db, client)
+    except Exception as e:
+        logger.exception("Error during event dispatch for %s: %s", event_id, e)
