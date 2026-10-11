@@ -10,8 +10,10 @@ from sqlalchemy import text
 
 from alembic import command
 from app.api import api_router
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal, engine
+from app.models import Base
 
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
