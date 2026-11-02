@@ -27,6 +27,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r backend/requirements.txt
+      - run: bash scripts/check_parser_sync.sh
       - run: make ci
         working-directory: backend
         env:
