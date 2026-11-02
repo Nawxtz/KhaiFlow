@@ -20,7 +20,11 @@ from app.core.database import Base, get_db
 from app.main import app
 from app.services.cache import inventory_cache
 
-test_engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+test_db_url = TEST_DATABASE_URL
+if test_db_url.startswith("postgresql://"):
+    test_db_url = test_db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
+
+test_engine = create_engine(test_db_url, pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 

@@ -853,7 +853,10 @@ def run_evaluation(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
         elapsed_ms = (time.perf_counter() - t0) * 1000
         timings.append(elapsed_ms)
 
-        is_address = result.status not in ("Not an Address",)
+        is_address = result.status not in ("Not an Address",) and not (
+            any(w.startswith("[IntentShield]") for w in result.warnings)
+            or (result.status == "Cannot ship" and result.confidence == 0.0)
+        )
         is_flagged = result.status == "Flagged for Review"
 
         # Intent classification

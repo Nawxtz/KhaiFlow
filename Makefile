@@ -1,11 +1,11 @@
 .RECIPEPREFIX = >
 
-.PHONY: help ci secret-scan i18n-lint migration-check lint typecheck test build dev deploy-check
+.PHONY: help ci secret-scan i18n-lint migration-check parser-sync lint typecheck test build dev deploy-check
 
 help:
-> @echo "Targets: ci, lint, typecheck, test, build, secret-scan, i18n-lint, migration-check, dev, deploy-check"
+> @echo "Targets: ci, lint, typecheck, test, build, secret-scan, i18n-lint, migration-check, parser-sync, dev, deploy-check"
 
-ci: secret-scan i18n-lint migration-check lint typecheck test build
+ci: secret-scan i18n-lint migration-check parser-sync lint typecheck test build
 
 secret-scan:
 > @bash scripts/check_no_secrets.sh
@@ -15,6 +15,9 @@ i18n-lint:
 
 migration-check:
 > @bash scripts/migration_check.sh
+
+parser-sync:
+> @bash scripts/check_parser_sync.sh
 
 lint:
 > @if [ -d backend ]; then cd backend && ruff check .; else echo "backend/ missing; skipping lint"; fi
