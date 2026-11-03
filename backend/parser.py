@@ -490,6 +490,22 @@ class SmartAddressParser:
             elif raw.startswith("66") and not raw.startswith("0"):
                 raw = "0" + raw[2:]
             text = text[: m.start()] + " " + text[m.end():]
+            while True:
+                found = False
+                for m2 in PHONE_RE.finditer(text):
+                    if m2.start() > 0 and text[m2.start() - 1].isdigit():
+                        if m2.start() < 5 or text[m2.start() - 5 : m2.start()] not in self._valid_zips:
+                            continue
+                    start = m2.start()
+                    prefix = text[:start]
+                    sep_m = re.search(r"\s*(?:/|,|หรือ)\s*$", prefix)
+                    if sep_m:
+                        start = sep_m.start()
+                    text = text[:start] + " " + text[m2.end():]
+                    found = True
+                    break
+                if not found:
+                    break
             return raw, re.sub(r"\s+", " ", text).strip()
         return None, text
 
