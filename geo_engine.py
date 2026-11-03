@@ -26,13 +26,16 @@ import re
 import warnings
 from collections import defaultdict
 from io import StringIO
-from typing import Dict, FrozenSet, List, Optional, Set, Tuple
+from typing import Callable, Dict, FrozenSet, List, Optional, Set, Tuple
 
 from models import GeoRecord
 from constants import (
     FUZZY_THRESHOLD,
     FUZZY_MAX_LEN_DIFF,
     HONORIFIC_SKIP_SET,
+    HONORIFIC_PATTERN,
+    NAME_STOP_WORDS,
+    RECEIVER_LABEL_RE,
 )
 
 logger = logging.getLogger("ThaiSmartAddress.geo")
@@ -225,7 +228,8 @@ class GeoDatabase:
                         idx = text.find(full)
                         while idx != -1:
                             end_idx = idx + flen
-                            if check_after(end_idx, _DIST_PFXS + prov_prefixes):
+                            before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                            if before_ok and check_after(end_idx, _DIST_PFXS + prov_prefixes):
                                 m.append((idx, end_idx, True, len(sub)))
                             idx = text.find(full, idx + 1)
                     tlen = len(sub)
@@ -251,7 +255,8 @@ class GeoDatabase:
                         idx = text.find(full)
                         while idx != -1:
                             end_idx = idx + flen
-                            if check_after(end_idx, prov_prefixes):
+                            before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                            if before_ok and check_after(end_idx, prov_prefixes):
                                 m.append((idx, end_idx, True, len(dist)))
                             idx = text.find(full, idx + 1)
                     tlen = len(dist)
@@ -296,7 +301,8 @@ class GeoDatabase:
                         idx = text.find(full)
                         while idx != -1:
                             end_idx = idx + flen
-                            if check_after(end_idx):
+                            before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                            if before_ok and check_after(end_idx):
                                 m.append((idx, end_idx, True, len(prov)))
                             idx = text.find(full, idx + 1)
                     tlen = len(prov)
@@ -591,28 +597,79 @@ class FuzzyGeoMatcher:
             except Exception:
                 tokens.append(tok)
 
+        receiver_tokens: Set[str] = set()
+        m_lbl = RECEIVER_LABEL_RE.search(text)
+        if m_lbl:
+            receiver_tokens.update(re.split(r"[\s,\-/]+", m_lbl.group(1)))
+        for hm in HONORIFIC_PATTERN.finditer(text):
+            clean_span = text[hm.start():hm.end()].strip()
+            if clean_span in NAME_STOP_WORDS or any(clean_span.startswith(sw) for sw in NAME_STOP_WORDS):
+                continue
+            receiver_tokens.update(re.split(r"[\s,\-/]+", clean_span))
+            after = text[hm.end():]
+            m2 = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", after)
+            if m2 and m2.group(1) not in NAME_STOP_WORDS:
+                receiver_tokens.add(m2.group(1))
+
+        used_dist_prov: Set[str] = set()
+        exact_rec, _, _ = self._geo.lookup(text, zipcode_hint=zipcode_hint)
+        if exact_rec:
+            if exact_rec.district:
+                used_dist_prov.add(exact_rec.district)
+            if exact_rec.province:
+                used_dist_prov.add(exact_rec.province)
+
+        _GEO_PREFIX_STRIP = [
+            ("ตำบล", "sub"), ("อำเภอ", "dist"), ("จังหวัด", "prov"),
+            ("แขวง", "sub"), ("เขต", "dist"),
+            ("ต.", "sub"), ("อ.", "dist"), ("จ.", "prov"),
+        ]
+
         best_score = 0
         best_rec: Optional[GeoRecord] = None
 
         for token in tokens:
-            if token in HONORIFIC_SKIP_SET:
+            if token in HONORIFIC_SKIP_SET or token in receiver_tokens:
                 continue
 
-            subs  = cand_subs  if not use_buckets else self._near_len(token, self._sub_by_len)
-            dists = cand_dists if not use_buckets else self._near_len(token, self._dist_by_len)
-            provs = cand_provs if not use_buckets else self._near_len(token, self._prov_by_len)
+            pfx_type = None
+            stripped = token
+            for pfx, kind in _GEO_PREFIX_STRIP:
+                if token.startswith(pfx) and len(token) > len(pfx):
+                    stripped = token[len(pfx):]
+                    pfx_type = kind
+                    break
+
+            if stripped in receiver_tokens or len(stripped) < 2:
+                continue
+
+            subs  = cand_subs  if not use_buckets else self._near_len(stripped, self._sub_by_len)
+            dists = cand_dists if not use_buckets else self._near_len(stripped, self._dist_by_len)
+            provs = cand_provs if not use_buckets else self._near_len(stripped, self._prov_by_len)
 
             tok_best_score = 0
             tok_best_rec: Optional[GeoRecord] = None
             tok_best_label = ""
 
-            # FIX [FIX-G3]: use public records_for_* accessors
-            for cands, accessor, weight, label_prefix in [
+            checks: List[Tuple[List[str], Callable[[str], List[GeoRecord]], int, str]] = [
                 (subs,  self._geo.records_for_sub_district, 4, "ตำบล"),
                 (dists, self._geo.records_for_district,     3, "อำเภอ"),
                 (provs, self._geo.records_for_province,     2, "จังหวัด"),
-            ]:
-                match, score = correct_typo(token, cands, threshold)
+            ]
+            if pfx_type == "dist":
+                cands_to_check = [c for c in checks if c[3] == "อำเภอ"]
+            elif pfx_type == "sub":
+                cands_to_check = [c for c in checks if c[3] == "ตำบล"]
+            elif pfx_type == "prov":
+                cands_to_check = [c for c in checks if c[3] == "จังหวัด"]
+            else:
+                if stripped in used_dist_prov or token in used_dist_prov:
+                    cands_to_check = [c for c in checks if c[3] != "ตำบล"]
+                else:
+                    cands_to_check = checks
+
+            for cands, accessor, weight, label_prefix in cands_to_check:
+                match, score = correct_typo(stripped, cands, threshold)
                 if match and score > tok_best_score:
                     recs = accessor(match)
                     if zipcode_hint:
