@@ -16,11 +16,11 @@ TEST_DATABASE_URL = os.getenv(
 # Set environment before loading app
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
-from app.core.database import Base, get_db
+from app.core.database import Base, db_url, get_db
 from app.main import app
 from app.services.cache import inventory_cache
 
-test_engine = create_engine(TEST_DATABASE_URL, pool_pre_ping=True)
+test_engine = create_engine(db_url, pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
 
 
