@@ -811,7 +811,6 @@ class SmartAddressParser:
             t = re.sub(p, " ", t, flags=re.IGNORECASE)
         # Strip isolated stray vowels / tone marks at word boundaries or ends
         t = re.sub(r"(?:^|\s)[\u0E30-\u0E39\u0E47-\u0E4E]+(?=\s|$)", " ", t)
-        t = re.sub(r"[\u0E30-\u0E39\u0E47-\u0E4E]+$", "", t)
         t = re.sub(r"(?:^|\s)หมู่\s*$", " ", t)
         t = re.sub(r"\s+", " ", t).strip(" ,.-")
         if t in ("ช่วย", "ส่ง", "จัดส่ง", "รบกวน", "ฝาก", "ที่", "แถว", "ช่วยส่งให้", "ส่งให้", "ค่ะ", "ครับ", "นะคะ"):
