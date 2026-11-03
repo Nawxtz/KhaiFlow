@@ -373,6 +373,8 @@ INTENT_NEG_KEYWORDS: FrozenSet[str] = frozenset([
     # [FIX-C12]: Temporal/operational enquiries — "เปิดกี่โมง", "ปิดกี่โมง" etc.
     # Safe: no delivery address ever contains "กี่โมง".
     "กี่โมง",
+    # Tracking and delivery-status enquiries
+    "เลขพัสดุ", "tracking", "ส่งถึงยัง", "ติดตาม",
     # NOTE: "นะคะ", "คะ", "ครับ", "นะครับ" intentionally REMOVED [FIX-C8]
 ])
 
