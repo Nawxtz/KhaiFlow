@@ -516,6 +516,8 @@ class SmartAddressParser:
         # was split across tokens (e.g. "เมือง เชียงใหม่" → "เมือง" stub after
         # "เมืองเชียงใหม่" is stripped as a unit).  Only strip when surrounded
         # by whitespace/boundary to avoid clipping legitimate place-name parts.
+        if getattr(rec, "district", None) and rec.district.startswith("เมือง"):
+            text = re.sub(r"(?<!\S)อำเภอ\s*เมือง(?!\S)", " ", text)
         text = re.sub(r"(?<!\S)(?:เมือง|อำเภอ|เขต|จังหวัด|ตำบล|แขวง)(?!\S)", " ", text)
         return re.sub(r"\s+", " ", text).strip()
 
@@ -766,6 +768,11 @@ class SmartAddressParser:
             r"ฝากติด",
             r"(?:วันนี้ต้องใช้|ต้องใช้วันนี้)(?:ค่ะ|ครับ|นะคะ)?",
 
+            # Guard / fold / dry instructions
+            r"(?:ฝาก(?:ไว้)?(?:ที่)?)?(?:ป้อมยาม|ป้อมหน้า|ป้อมประตู|รปภ\.?|security)(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+            r"(?:ห้าม|อย่า)พับ(?:\s*เด็ดขาด)?(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+            r"(?:ห้าม|อย่า)เปียก(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+
             # Delivery mode / negative
             r"ไม่มีของแตก(?:ครับ|ค่ะ)?",
             r"ของไม่แตก(?:ครับ|ค่ะ)?",
@@ -792,7 +799,7 @@ class SmartAddressParser:
         t = re.sub(r"\s+", " ", t).strip(" ,.-")
         if t in ("ช่วย", "ส่ง", "จัดส่ง", "รบกวน", "ฝาก", "ที่", "แถว", "ช่วยส่งให้", "ส่งให้", "ค่ะ", "ครับ", "นะคะ"):
             return None
-        if len(t) < 2:
+        if len(t) < 2 and not t.isdigit():
             return None
         return t or None
 
