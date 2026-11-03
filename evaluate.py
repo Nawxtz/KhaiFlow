@@ -439,7 +439,7 @@ DATASET: List[EvalCase] = [
         category="tags", description="Time_sensitive tag",
         expect_address=True,
         expected={"province": "ปทุมธานี", "zipcode": "12120"},
-        expect_tags=["Time_sensitive"],
+        expect_tags=["Urgent"],
     ),
     EvalCase(
         input="คุณบุญมา 33/3 ต.ในเมือง อ.เมืองนครราชสีมา จ.นครราชสีมา 30000 ระวังของแตก ด่วนๆ",
