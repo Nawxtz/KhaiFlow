@@ -317,6 +317,19 @@ class GeoDatabase:
                 prov_cache[prov] = m
             return prov_cache[prov]
 
+        if zipcode_hint and zipcode_hint in self._zip_map and not any(
+            get_sub_matches(r.sub_district) or get_dist_matches(r.district, r.province) for r in pool
+        ):
+            full_pool = [
+                r for r in self._build_candidate_pool(text, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS)
+                if get_sub_matches(r.sub_district)
+                and get_dist_matches(r.district, r.province)
+                and any(m[2] for m in get_prov_matches(r.province))
+            ]
+            if full_pool:
+                pool = full_pool
+                warnings_out.append(f"[ZipMismatch] Zipcode '{zipcode_hint}' does not match typed address")
+
         scored: List[Tuple[Tuple[int, int, int, int], int, GeoRecord]] = []
         for rec in pool:
             sms = get_sub_matches(rec.sub_district)
