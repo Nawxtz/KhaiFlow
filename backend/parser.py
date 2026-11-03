@@ -639,6 +639,11 @@ class SmartAddressParser:
                 text = text[_pre.start():].strip()
         # Pass B: house-number anchor
         if receiver is None:
+            qty = ""
+            qm = re.match(r"\s*\d+\s*(?:ชิ้น|ตัว|กล่อง|ชุด|ขวด|แพ็ค|อัน)(?![ก-๙])", text)
+            if qm:
+                qty = qm.group(0).strip()
+                text = text[qm.end():].strip()
             am = ADDRESS_DETAIL_RE.search(text)
             if am:
                 before = text[: am.start()].strip()
@@ -668,6 +673,8 @@ class SmartAddressParser:
                         # prefixes (e.g. "แอดมิน") preceded the receiver and were
                         # already skipped in the loop — leaving them in address_detail.
                         text = text[am.start():].strip()
+            if qty:
+                text = f"{qty} {text}".strip()
 
         # [FIX-P6] Strip leading company/org prefix before building digit/word.
         # GUARD: only fire when text starts with a company marker (บจก/บริษัท/หจก)
