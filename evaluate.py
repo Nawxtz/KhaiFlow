@@ -21,6 +21,7 @@ Uses the built-in mock geo database — no CSV file required.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import sys
 import time
@@ -818,11 +819,38 @@ def bar(value: float, width: int = 20) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def latency_summary(timings_ms: list[float]) -> dict:
+    if not timings_ms:
+        return {}
+    sorted_timings = sorted(timings_ms)
+    n = len(sorted_timings)
+    mean_val = sum(sorted_timings) / n
+    max_val = max(sorted_timings)
+    idx_p50 = max(0, min(n - 1, math.ceil(50 / 100.0 * n) - 1))
+    idx_p95 = max(0, min(n - 1, math.ceil(95 / 100.0 * n) - 1))
+    p50_val = sorted_timings[idx_p50]
+    p95_val = sorted_timings[idx_p95]
+    throughput = (1000.0 / mean_val) if mean_val > 0 else 0.0
+    return {
+        "p50": p50_val,
+        "p95": p95_val,
+        "mean": mean_val,
+        "max": max_val,
+        "throughput_per_s": throughput,
+    }
+
+
 def run_evaluation(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
     fields_to_eval = ["province", "zipcode", "district", "sub_district", "phone", "receiver"]
+    scored_fields = ["province", "zipcode", "district", "sub_district", "phone"]
 
     field_correct = {f: 0 for f in fields_to_eval}
     field_total   = {f: 0 for f in fields_to_eval}
+
+    field_tp = {f: 0 for f in scored_fields}
+    field_fp = {f: 0 for f in scored_fields}
+    field_fn = {f: 0 for f in scored_fields}
+    field_support = {f: 0 for f in scored_fields}
 
     tag_correct = 0
     tag_total   = 0
@@ -858,6 +886,24 @@ def run_evaluation(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
             or (result.status == "Cannot ship" and result.confidence == 0.0)
         )
         is_flagged = result.status == "Flagged for Review"
+
+        for f in scored_fields:
+            if not case.expected or f not in case.expected:
+                continue
+            exp_val = case.expected[f]
+            if exp_val == "":
+                exp_val = None
+            act_val = getattr(result, f, None)
+            if act_val == "":
+                act_val = None
+
+            field_support[f] += 1
+            if act_val == exp_val:
+                field_tp[f] += 1
+            else:
+                field_fn[f] += 1
+                if act_val is not None:
+                    field_fp[f] += 1
 
         # Intent classification
         if case.expect_address and is_address:
@@ -919,6 +965,30 @@ def run_evaluation(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
             if target and target in (result.province, result.zipcode):
                 fuzzy_correct += 1
 
+    field_prf = {}
+    for f in scored_fields:
+        f_tp = field_tp[f]
+        f_fp = field_fp[f]
+        f_fn = field_fn[f]
+        prec = f_tp / (f_tp + f_fp) if (f_tp + f_fp) > 0 else 0.0
+        rec = f_tp / (f_tp + f_fn) if (f_tp + f_fn) > 0 else 0.0
+        f1 = (2 * prec * rec / (prec + rec)) if (prec + rec) > 0 else 0.0
+        field_prf[f] = {
+            "precision": prec,
+            "recall": rec,
+            "f1": f1,
+            "support": field_support[f],
+        }
+
+    macro_f1 = sum(field_prf[f]["f1"] for f in scored_fields) / len(scored_fields) if scored_fields else 0.0
+
+    total_tp = sum(field_tp[f] for f in scored_fields)
+    total_fp = sum(field_fp[f] for f in scored_fields)
+    total_fn = sum(field_fn[f] for f in scored_fields)
+    micro_prec = total_tp / (total_tp + total_fp) if (total_tp + total_fp) > 0 else 0.0
+    micro_rec = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
+    micro_f1 = (2 * micro_prec * micro_rec / (micro_prec + micro_rec)) if (micro_prec + micro_rec) > 0 else 0.0
+
     return {
         "field_correct":      field_correct,
         "field_total":        field_total,
@@ -931,6 +1001,9 @@ def run_evaluation(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
         "confidences":        confidences,
         "category_results":   category_results,
         "failed_cases":       failed_cases,
+        "field_prf":          field_prf,
+        "macro_f1":           macro_f1,
+        "micro_f1":           micro_f1,
     }
 
 
@@ -1023,11 +1096,15 @@ def format_report(results: dict, total_cases: int) -> str:
     timings = results["timings"]
     confidences = results["confidences"]
     if timings:
+        lat = latency_summary(timings)
         avg_ms = sum(timings) / len(timings)
         max_ms = max(timings)
         A("── Performance ──────────────────────────────────────────────")
         A(f"  Avg processing time : {avg_ms:.1f} ms")
+        A(f"  p50 processing time : {lat['p50']:.1f} ms")
+        A(f"  p95 processing time : {lat['p95']:.1f} ms")
         A(f"  Max processing time : {max_ms:.1f} ms")
+        A(f"  Throughput          : {lat['throughput_per_s']:.1f} req/s")
     if confidences:
         avg_conf = sum(confidences) / len(confidences)
         A(f"  Avg confidence score: {avg_conf:.3f}  ({avg_conf:.1%})")
