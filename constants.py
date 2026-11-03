@@ -255,6 +255,8 @@ ZIPCODE_COMPLAINT_RE = re.compile(
 # SEMANTIC KEYWORD TAGS
 # ══════════════════════════════════════════════════════════════════════════════
 
+_COURIER_VERB = r"(?:(?:ขอ\s*)?(?:ส่ง|ใช้)(?:\s*(?:ทาง|ด้วย|แบบ|เป็น))?\s*)"
+
 _KEYWORD_TAGS: List[Tuple[str, str]] = [
     # Urgent tags
     (r"ด่วน(?:ๆ|มากๆ|มาก|ที่สุด)?",                          "Urgent"),
@@ -298,10 +300,22 @@ _KEYWORD_TAGS: List[Tuple[str, str]] = [
     (r"(?:ห้าม|อย่า)พับ(?:\s*เด็ดขาด)?",                     "Do_not_fold"),
     (r"(?:ห้าม|อย่า)เปียก",                                   "Keep_dry"),
     (r"(?i)(?<!ไม่ต้อง\s)(?<!ไม่ต้อง)(?<!ไม่\s)(?<!ไม่)(?:(?:เก็บ|ชำระ|จ่าย)(?:เงิน)?ปลายทาง|\bcod\b)", "COD"),
+
+    # Courier tags
+    (r"(?i)(?:" + _COURIER_VERB + r")?(?:(?<![a-z])kerry(?![a-z])|เคอรี่)", "Courier_Kerry"),
+    (r"(?i)(?:(?:" + _COURIER_VERB + r")?(?:(?<![a-z])flash\s*express(?![a-z])|แฟลช)|" + _COURIER_VERB + r"(?<![a-z])flash(?![a-z]))", "Courier_Flash"),
+    (r"(?i)(?:" + _COURIER_VERB + r")?(?:(?<![a-z])j&t(?:\s*express)?(?![a-z])|เจแอนด์ที)", "Courier_JT"),
+    (r"(?i)(?:" + _COURIER_VERB + r")?(?:(?<![a-z])ems(?![a-z])|อีเอ็มเอส)", "Courier_EMS"),
+    (r"(?i)" + _COURIER_VERB + r"ไปรษณีย์(?:\s*(?:ไทย|ธรรมดา|ลงทะเบียน))?", "Courier_ThaiPost"),
 ]
 TAG_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(pat), tag) for pat, tag in _KEYWORD_TAGS
 ]
+
+_COURIER_PATS = [pat.replace("(?i)", "") for pat, tag in _KEYWORD_TAGS if tag.startswith("Courier_")]
+COURIER_STRIP_RE = re.compile(
+    r"(?i)(?:(?:" + "|".join(_COURIER_PATS) + r")(?:\s*(?:นะคะ|นะค่ะ|นะครับ|ค่ะ|คะ|ครับ|จ้า|ค้า|ด้วยนะ|ด้วย|นะ))*)"
+)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PHONE & ZIPCODE PATTERNS

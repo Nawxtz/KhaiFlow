@@ -37,6 +37,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from constants import (
     ABBREV_EXPAND, ADDRESS_DETAIL_RE, CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
+    COURIER_STRIP_RE,
     FUZZY_THRESHOLD, HONORIFIC_PATTERN, HONORIFIC_SKIP_SET,
     INTENT_NEG_KEYWORDS,
     NAME_STOP_WORDS, NER_FALLBACK_THRESHOLD,
@@ -543,6 +544,7 @@ class SmartAddressParser:
         for pattern, tag in TAG_PATTERNS:
             if pattern.search(text):
                 tags.append(tag)
+        text = COURIER_STRIP_RE.sub(" ", text)
         return list(dict.fromkeys(tags)), text
 
     def _extract_receiver_and_address(
