@@ -436,7 +436,7 @@ class SmartAddressParser:
         # [FIX-N2] Strip negated parenthetical content.
         # "...(แต่อันนี้ไม่ต้องส่งนะ)..." tells the admin to ignore that block.
         text = re.sub(r'\([^)]{2,120}(?:ไม่ต้องส่ง|ไม่ต้อง|อย่าส่ง|ยกเลิก)[^)]{0,60}\)', ' ', text)
-        text = re.sub(r'(?:ออเดอร์|รหัสลูกค้า)\s*[:#\-]?\s*\d+', ' ', text)
+        text = re.sub(r'(?:เลข)?(?:ออเดอร์|(?i:order)|รหัสลูกค้า)\s*[:#\-]?\s*#?[A-Za-z]{0,3}\d+', ' ', text)
         text = re.sub(r'(?:ยอด(?:โอน|รวม)?|ค่าส่ง)\s*[:\-]?\s*\d[\d,]*(?:\.\d+)?\s*(?:บาท|บ\.)?', ' ', text)
         text = CHAT_JUNK_PATTERN.sub(" ", text)
         # Strip social media handle lines: "Line ID: xxx", "FB: xxx", "IG: xxx"
@@ -444,7 +444,7 @@ class SmartAddressParser:
         # Strip social media handle + all trailing tokens until next key-value pattern
         # "FB: ก้องเกียรติ สุดเท่" → " " (strips both words after FB:)
         text = re.sub(
-            r'(?i)(?:line\s*(?:id|ID)|\bline(?=\s*:)|facebook|fb|instagram|ig|twitter)\s*[:\-]?\s*[^\n\r:]+?(?=\s+(?:[ก-๙A-Za-z]+\s*:|$|\d{5})|$)',
+            r'(?i)(?:line\s*(?:id|ID)|\b(?:id\s*)?line(?=\s*:)|facebook|fb|instagram|ig|twitter)\s*[:\-]?\s*[^\n\r:]+?(?=\s+(?:[ก-๙A-Za-z]+\s*:|$|\d{5})|$)',
             ' ', text
         )
         text = re.sub(r'(?:เบอร์สำรอง|เบอร์หลัก|เบอร์รอง)', ' ', text)
