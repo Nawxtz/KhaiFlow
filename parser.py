@@ -464,18 +464,19 @@ class SmartAddressParser:
         text = re.sub(r"([฀-๿])\.$", r"\1", text)
         return re.sub(r"\s+", " ", text).strip()
 
-    @staticmethod
-    def _extract_phone(text: str) -> Tuple[Optional[str], str]:
-        m = PHONE_RE.search(text)
-        if not m:
-            return None, text
-        raw = re.sub(r"[\s\-\./]", "", m.group())
-        if raw.startswith("+66"):
-            raw = "0" + raw[3:]
-        elif raw.startswith("66") and not raw.startswith("0"):
-            raw = "0" + raw[2:]
-        text = text[: m.start()] + " " + text[m.end():]
-        return raw, re.sub(r"\s+", " ", text).strip()
+    def _extract_phone(self, text: str) -> Tuple[Optional[str], str]:
+        for m in PHONE_RE.finditer(text):
+            if m.start() > 0 and text[m.start() - 1].isdigit():
+                if m.start() < 5 or text[m.start() - 5 : m.start()] not in self._valid_zips:
+                    continue
+            raw = re.sub(r"[\s\-\./]", "", m.group())
+            if raw.startswith("+66"):
+                raw = "0" + raw[3:]
+            elif raw.startswith("66") and not raw.startswith("0"):
+                raw = "0" + raw[2:]
+            text = text[: m.start()] + " " + text[m.end():]
+            return raw, re.sub(r"\s+", " ", text).strip()
+        return None, text
 
     def _extract_zipcode(self, text: str) -> Tuple[Optional[str], str]:
         matches = list(ZIPCODE_RE.finditer(text))
