@@ -1176,6 +1176,7 @@ NOISE_TRANSFORMS = [
     ("chat_prefix", lambda s: "สวัสดีค่ะ รบกวนส่งที่นี่นะคะ " + s),
     ("emoji_suffix", lambda s: s + " ขอบคุณค่ะ 🙏😊"),
     ("newlines", lambda s: s.replace(" ", "\n")),
+    ("no_spaces", lambda s: s.replace(" ", "")),
 ]
 
 
