@@ -444,7 +444,7 @@ class SmartAddressParser:
         # Strip social media handle + all trailing tokens until next key-value pattern
         # "FB: ก้องเกียรติ สุดเท่" → " " (strips both words after FB:)
         text = re.sub(
-            r'(?i)(?:line\s*(?:id|ID)|facebook|fb|instagram|ig|twitter)\s*[:\-]?\s*[^\n\r:]+?(?=\s+(?:[ก-๙A-Za-z]+\s*:|$|\d{5})|$)',
+            r'(?i)(?:line\s*(?:id|ID)|\bline(?=\s*:)|facebook|fb|instagram|ig|twitter)\s*[:\-]?\s*[^\n\r:]+?(?=\s+(?:[ก-๙A-Za-z]+\s*:|$|\d{5})|$)',
             ' ', text
         )
         text = re.sub(r'(?:เบอร์สำรอง|เบอร์หลัก|เบอร์รอง)', ' ', text)
