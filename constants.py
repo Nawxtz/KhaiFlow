@@ -297,6 +297,7 @@ _KEYWORD_TAGS: List[Tuple[str, str]] = [
     (r"(?:ฝาก(?:ไว้)?(?:ที่)?)?(?:ป้อมยาม|ป้อมหน้า|ป้อมประตู|รปภ\.?|security)",  "Drop_at_guard"),
     (r"(?:ห้าม|อย่า)พับ(?:\s*เด็ดขาด)?",                     "Do_not_fold"),
     (r"(?:ห้าม|อย่า)เปียก",                                   "Keep_dry"),
+    (r"(?i)(?<!ไม่ต้อง\s)(?<!ไม่ต้อง)(?<!ไม่\s)(?<!ไม่)(?:(?:เก็บ|ชำระ|จ่าย)(?:เงิน)?ปลายทาง|\bcod\b)", "COD"),
 ]
 TAG_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(pat), tag) for pat, tag in _KEYWORD_TAGS
