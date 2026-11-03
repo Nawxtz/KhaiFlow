@@ -269,9 +269,19 @@ class SmartAddressParser:
 
     # ── Phase -1 ──────────────────────────────────────────────────────────────
 
+    @staticmethod
+    def _is_monetary_zip(text: str, m: re.Match) -> bool:
+        before = text[: m.start()].strip()
+        after = text[m.end() :].lstrip()
+        return bool(
+            re.search(r"ยอด\s*$", before) or
+            after.startswith("บาท")
+        )
+
     def _intent_shield(self, raw_text: str, t0: float) -> Optional[ParseResult]:
         text_lower = raw_text.lower()
-        has_neg_kw = any(kw in text_lower for kw in INTENT_NEG_KEYWORDS)
+        has_money_zip = any(self._is_monetary_zip(raw_text, m) for m in ZIPCODE_RE.finditer(raw_text))
+        has_neg_kw = any(kw in text_lower for kw in INTENT_NEG_KEYWORDS) or has_money_zip
         if not has_neg_kw:
             return None
 
@@ -285,15 +295,8 @@ class SmartAddressParser:
         # (preceded by ยอด or followed by บาท); if present, do not bypass.
         if PHONE_RE.search(raw_text):
             return None
-        zip_match = ZIPCODE_RE.search(raw_text)
-        if zip_match:
-            before_zip = raw_text[:zip_match.start()]
-            after_zip  = raw_text[zip_match.end():]
-            monetary = (
-                re.search(r'ยอด\s*$', before_zip.strip()) or
-                after_zip.lstrip().startswith('บาท')
-            )
-            if not monetary:
+        for m in ZIPCODE_RE.finditer(raw_text):
+            if not self._is_monetary_zip(raw_text, m):
                 return None
 
         result = ParseResult(
@@ -479,7 +482,7 @@ class SmartAddressParser:
         return None, text
 
     def _extract_zipcode(self, text: str) -> Tuple[Optional[str], str]:
-        matches = list(ZIPCODE_RE.finditer(text))
+        matches = [m for m in ZIPCODE_RE.finditer(text) if not self._is_monetary_zip(text, m)]
         if not matches:
             return None, text
         for m in matches:
