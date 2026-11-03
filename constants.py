@@ -159,12 +159,15 @@ _CONNECTORS: List[str] = [
     "เอาส่งมาที่", "เอาส่งที่", "ส่งมาที่", "ส่งมา",
     "To:", "to:", "ส่ง",
     "ครับผม", "นะครับ", "นะคะ", "นะค่ะ", "นะค้า", "นะจ้า",
-    "ครับ", "ค่ะ", "คะ", "จ้า", "ค้า",
+    "ครับ", "ค่ะ", "คะ", "จ้า",
     "เลยนะ", "เลย",
     "ให้ด้วย", "ด้วย", "ให้",
 ]
+_CONNECTOR_GUARD = "".join(f"(?<!{w})(?<!{w} )" for w in ["ซอย", "ถนน", "หมู่บ้าน", "อาคาร"])
 CONNECTOR_PATTERN = re.compile(
-    r"(?<!\S)ที่(?!\S)|" + "|".join(re.escape(c) for c in sorted(_CONNECTORS, key=len, reverse=True))
+    r"(?<!\S)ที่(?!\S)|"
+    + _CONNECTOR_GUARD
+    + rf"(?:{'|'.join(re.escape(c) for c in sorted(_CONNECTORS, key=len, reverse=True))}|(?<!ลูก)(?<!พ่อ)(?<!แม่)(?<!การ)ค้า)"
 )
 
 _PHONE_LABELS: List[str] = [
