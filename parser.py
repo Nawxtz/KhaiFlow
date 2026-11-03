@@ -363,7 +363,7 @@ class SmartAddressParser:
             text = self._strip_geo_tokens(text, geo_rec)
 
         # Zipcode-driven Auto-Fill: Infer missing province, district, and sub-district from Zipcode
-        if result.zipcode and result.zipcode in self._geo._zip_map:
+        if result.zipcode and result.zipcode in self._geo._zip_map and not any("ZipMismatch" in w for w in result.warnings):
             zip_pool = self._geo._zip_map[result.zipcode]
             if not result.province and zip_pool:
                 result.province = zip_pool[0].province
@@ -978,6 +978,10 @@ class SmartAddressParser:
             or any("AutoFill" in w for w in result.warnings)
         ):
             needs_confirm_reasons.append("auto-filled or partial match")
+        if any("ZipMismatch" in w for w in result.warnings):
+            needs_confirm_reasons.append("zipcode does not match province")
+        if any("not found in geo DB" in w for w in result.warnings):
+            needs_confirm_reasons.append("unknown zipcode")
 
         if needs_confirm_reasons:
             result.status     = "Needs confirmation"
