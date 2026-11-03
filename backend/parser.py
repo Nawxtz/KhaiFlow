@@ -38,7 +38,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from constants import (
     ABBREV_EXPAND, ADDRESS_DETAIL_RE, CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
     COURIER_STRIP_RE,
-    FUZZY_THRESHOLD, HONORIFIC_PATTERN, HONORIFIC_SKIP_SET,
+    FUZZY_THRESHOLD, GREETING_LEAD_PATTERN, HONORIFIC_PATTERN, HONORIFIC_SKIP_SET,
     INTENT_NEG_KEYWORDS,
     NAME_STOP_WORDS, NER_FALLBACK_THRESHOLD,
     PHONE_LABEL_PATTERN, PHONE_RE, RECEIVER_LABEL_RE, TAG_PATTERNS,
@@ -581,12 +581,22 @@ class SmartAddressParser:
 
         # [FIX-T8] Protect "เลขที่ N" from connector stripping — preserves house nums
         text = re.sub(r'เลขที่\s*(\d)', r'\1', text)
+        while True:
+            gm = GREETING_LEAD_PATTERN.match(text)
+            if not gm or not gm.group(0).strip():
+                break
+            text = text[gm.end():].strip()
         text = CONNECTOR_PATTERN.sub(" ", text)
         text = re.sub(r"\b(ด้วยนะ|หน่อยนะ|ด้วย)\b", " ", text)
         text = re.sub(r'[ก-๙A-Za-z_]+\s*[:\-]\s*', ' ', text)  # FIX-R1 orphan labels
         text = re.sub(r'(?:ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
         text = re.sub(r'(?:^|\s)(?:กท|มา|ด่วนๆ)(?=\s|$)', ' ', text)
         text = re.sub(r"\s+", " ", text).strip()
+        while True:
+            gm = GREETING_LEAD_PATTERN.match(text)
+            if not gm or not gm.group(0).strip():
+                break
+            text = text[gm.end():].strip()
 
         # Pass A: Honorific anchor — include honorific in returned receiver
         # e.g. "คุณจิรายุ" → receiver = "คุณจิรายุ" (not just "จิรายุ")
@@ -649,6 +659,11 @@ class SmartAddressParser:
                 before = text[: am.start()].strip()
                 if before:
                     clean_name = re.sub(r"(?i)(tel|โทร|เบอร์โทร)\s*$", "", before).strip()
+                    while True:
+                        gm = GREETING_LEAD_PATTERN.match(clean_name)
+                        if not gm or not gm.group(0).strip():
+                            break
+                        clean_name = clean_name[gm.end():].strip()
                     trimmed: List[str] = []
                     started = False
                     for tok in clean_name.split():
