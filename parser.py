@@ -428,8 +428,7 @@ class SmartAddressParser:
         # [FIX-N2] Strip negated parenthetical content.
         # "...(แต่อันนี้ไม่ต้องส่งนะ)..." tells the admin to ignore that block.
         text = re.sub(r'\([^)]{2,120}(?:ไม่ต้องส่ง|ไม่ต้อง|อย่าส่ง|ยกเลิก)[^)]{0,60}\)', ' ', text)
-
-        text = re.sub(r'\([^)]{2,120}(?:ไม่ต้องส่ง|ไม่ต้อง|อย่าส่ง|ยกเลิก)[^)]{0,60}\)', ' ', text)
+        text = re.sub(r'(?:ออเดอร์|รหัสลูกค้า)\s*[:#\-]?\s*\d+', ' ', text)
         text = CHAT_JUNK_PATTERN.sub(" ", text)
         # Strip social media handle lines: "Line ID: xxx", "FB: xxx", "IG: xxx"
         # These must be removed before receiver extraction or they corrupt the name field.
@@ -699,6 +698,12 @@ class SmartAddressParser:
             return None
         t = text
         _NOISE_PATS = [
+            # Chat leftovers
+            r"(?:ออเดอร์|รหัสลูกค้า)\s*[:#\-]?\s*\d+",
+            r"[\U00010000-\U0010ffff\u200d\u2300-\u27bf\u2b00-\u2bff\ufe00-\ufe0f]+",
+            r"\([^)]*(?:ตอน\s*(?:เช้า|สาย|เที่ยง|บ่าย|เย็น|ค่ำ|ดึก)|ช่วง\s*(?:เช้า|สาย|เที่ยง|บ่าย|เย็น|ค่ำ|ดึก|\d+)|(?:ก่อน|หลัง)\s*(?:\d+\s*โมง|\d+[:.]\d+|เที่ยง|บ่าย)|(?:โทร|ติดต่อ)\s*(?:ก่อน|แจ้ง|บอก|หา|นัด|ตาม|ส่ง|\d)|(?<=\s|\()ก่อน(?:\s*ส่ง)?(?=\s|\)))[^)]*\)",
+            r"(?:ขอ|ต้องการ)?ใบกำกับภาษี(?:\s*เต็มรูปแบบ)?[^\s]*",
+
             # Urgent & instructions
             r"ของต้องถึง(?:ภายใน[^\s]+|วัน[^\s]+|พรุ่งนี้|ด่วน)?",
             r"ต้องถึง(?:ภายใน[^\s]+|วัน[^\s]+|พรุ่งนี้|ด่วน)?",
