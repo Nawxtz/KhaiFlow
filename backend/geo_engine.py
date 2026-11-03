@@ -182,15 +182,9 @@ class GeoDatabase:
         _DIST_PFXS = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
         _PROV_PFXS = ("จังหวัด", "จ.", "ที่", "จ ", "แถว")
 
-        def _score_field(term: str, pfxs: tuple, is_district: bool = False, prov: str = "") -> bool:
-            if self._wb_match(term, text):
-                return True
-            if any((pfx + term) in text for pfx in pfxs):
-                return True
-            if is_district and term.startswith("เมือง") and ("เมือง" in text or "อ.เมือง" in text or "อำเภอเมือง" in text):
-                if prov and (prov in text or any(pfx + prov in text for pfx in _PROV_PFXS)):
-                    return True
-            return False
+        if not hasattr(self, "_prov_tuple"):
+            self._prov_tuple = tuple(self._prov_map.keys())
+        prov_prefixes = _PROV_PFXS + self._prov_tuple
 
         if zipcode_hint and zipcode_hint in self._zip_map:
             pool: List[GeoRecord] = self._zip_map[zipcode_hint]
@@ -206,25 +200,159 @@ class GeoDatabase:
                 # recognisable geo token, e.g. keyboard-fallback input)
                 pool = self._all_records
 
-        scored: List[Tuple[int, GeoRecord]] = []
+        sub_cache: Dict[str, List[Tuple[int, int, bool, int]]] = {}
+        dist_cache: Dict[Tuple[str, str], List[Tuple[int, int, bool, int]]] = {}
+        prov_cache: Dict[str, List[Tuple[int, int, bool, int]]] = {}
+
+        def check_after(end_idx: int, follow_pfxs: tuple = ()) -> bool:
+            if end_idx >= len(text):
+                return True
+            ch = text[end_idx]
+            if not ('\u0E00' <= ch <= '\u0E7F'):
+                return True
+            for fp in follow_pfxs:
+                if text.startswith(fp, end_idx):
+                    return True
+            return False
+
+        def get_sub_matches(sub: str) -> List[Tuple[int, int, bool, int]]:
+            if sub not in sub_cache:
+                m = []
+                if sub:
+                    for pfx in _SUB_PFXS:
+                        full = pfx + sub
+                        flen = len(full)
+                        idx = text.find(full)
+                        while idx != -1:
+                            end_idx = idx + flen
+                            if check_after(end_idx, _DIST_PFXS + prov_prefixes):
+                                m.append((idx, end_idx, True, len(sub)))
+                            idx = text.find(full, idx + 1)
+                    tlen = len(sub)
+                    idx = text.find(sub)
+                    while idx != -1:
+                        end_idx = idx + tlen
+                        before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                        if before_ok and check_after(end_idx, _DIST_PFXS + prov_prefixes):
+                            if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                m.append((idx, end_idx, False, tlen))
+                        idx = text.find(sub, idx + 1)
+                sub_cache[sub] = m
+            return sub_cache[sub]
+
+        def get_dist_matches(dist: str, prov: str) -> List[Tuple[int, int, bool, int]]:
+            key = (dist, prov)
+            if key not in dist_cache:
+                m = []
+                if dist:
+                    for pfx in _DIST_PFXS:
+                        full = pfx + dist
+                        flen = len(full)
+                        idx = text.find(full)
+                        while idx != -1:
+                            end_idx = idx + flen
+                            if check_after(end_idx, prov_prefixes):
+                                m.append((idx, end_idx, True, len(dist)))
+                            idx = text.find(full, idx + 1)
+                    tlen = len(dist)
+                    idx = text.find(dist)
+                    while idx != -1:
+                        end_idx = idx + tlen
+                        before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                        if before_ok and check_after(end_idx, prov_prefixes):
+                            if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                m.append((idx, end_idx, False, tlen))
+                        idx = text.find(dist, idx + 1)
+                    if dist.startswith("เมือง"):
+                        prov_in_text = prov and (prov in text or any(pfx + prov in text for pfx in _PROV_PFXS))
+                        if prov_in_text:
+                            for muang_pfx in ("อำเภอเมือง", "อ.เมือง"):
+                                flen = len(muang_pfx)
+                                idx = text.find(muang_pfx)
+                                while idx != -1:
+                                    end_idx = idx + flen
+                                    if check_after(end_idx, prov_prefixes):
+                                        if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                            m.append((idx, end_idx, True, len(dist)))
+                                    idx = text.find(muang_pfx, idx + 1)
+                            idx = text.find("เมือง")
+                            while idx != -1:
+                                end_idx = idx + len("เมือง")
+                                before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                                if before_ok and check_after(end_idx, prov_prefixes):
+                                    if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                        m.append((idx, end_idx, False, len(dist)))
+                                idx = text.find("เมือง", idx + 1)
+                dist_cache[key] = m
+            return dist_cache[key]
+
+        def get_prov_matches(prov: str) -> List[Tuple[int, int, bool, int]]:
+            if prov not in prov_cache:
+                m = []
+                if prov:
+                    for pfx in _PROV_PFXS:
+                        full = pfx + prov
+                        flen = len(full)
+                        idx = text.find(full)
+                        while idx != -1:
+                            end_idx = idx + flen
+                            if check_after(end_idx):
+                                m.append((idx, end_idx, True, len(prov)))
+                            idx = text.find(full, idx + 1)
+                    tlen = len(prov)
+                    idx = text.find(prov)
+                    while idx != -1:
+                        end_idx = idx + tlen
+                        before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                        if before_ok and check_after(end_idx):
+                            if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                m.append((idx, end_idx, False, tlen))
+                        idx = text.find(prov, idx + 1)
+                prov_cache[prov] = m
+            return prov_cache[prov]
+
+        scored: List[Tuple[Tuple[int, int, int, int], int, GeoRecord]] = []
         for rec in pool:
-            score = 0
-            if _score_field(rec.sub_district, _SUB_PFXS):  score += 4
-            if _score_field(rec.district,     _DIST_PFXS, is_district=True, prov=rec.province):  score += 3
-            if _score_field(rec.province,     _PROV_PFXS):  score += 2
-            if rec.zipcode and rec.zipcode in text:          score += 1
-            if score > 0:
-                scored.append((score, rec))
+            sms = get_sub_matches(rec.sub_district)
+            dms = get_dist_matches(rec.district, rec.province)
+            pms = get_prov_matches(rec.province)
+            zip_matched = bool(rec.zipcode and rec.zipcode in text)
+
+            sub_opts = sms + [None]
+            dist_opts = dms + [None]
+            prov_opts = pms + [None]
+
+            best_key = (0, 0, 0, 0)
+            best_score = 0
+            for ms in sub_opts:
+                for md in dist_opts:
+                    if ms and md and (ms[0] < md[1] and md[0] < ms[1]):
+                        continue
+                    for mp in prov_opts:
+                        if ms and mp and (ms[0] < mp[1] and mp[0] < ms[1]):
+                            continue
+                        if md and mp and (md[0] < mp[1] and mp[0] < md[1]):
+                            continue
+                        score = (4 if ms else 0) + (3 if md else 0) + (2 if mp else 0) + (1 if zip_matched else 0)
+                        is_sub_pfx = 1 if (ms and ms[2]) else 0
+                        sub_len = ms[3] if ms else 0
+                        tot_len = (ms[3] if ms else 0) + (md[3] if md else 0) + (mp[3] if mp else 0)
+                        key = (score, is_sub_pfx, sub_len, tot_len)
+                        if key > best_key:
+                            best_key = key
+                            best_score = score
+            if best_score > 0:
+                scored.append((best_key, best_score, rec))
 
         if not scored:
             warnings_out.append("No geographic match found in text")
             return None, 0, warnings_out
 
         top2 = heapq.nlargest(2, scored, key=lambda x: x[0])
-        best_score, best_rec = top2[0]
+        best_key, best_score, best_rec = top2[0]
 
         if len(top2) > 1:
-            second_score, second_rec = top2[1]
+            second_key, second_score, second_rec = top2[1]
             if best_score == second_score and best_rec.province != second_rec.province:
                 warnings_out.append(
                     f"Geo ambiguity (score={best_score}): "
@@ -252,17 +380,38 @@ class GeoDatabase:
         seen: Set[GeoRecord] = set()
         pool: List[GeoRecord] = []
 
-        def _add_if_match(name: str, recs: List[GeoRecord], pfxs: tuple) -> None:
-            if self._wb_match(name, text) or any((p + name) in text for p in pfxs):
+        if not hasattr(self, "_prov_tuple"):
+            self._prov_tuple = tuple(self._prov_map.keys())
+        prov_prefixes = prov_pfxs + self._prov_tuple
+
+        def _pfx_match(name: str, pfxs: tuple, follow_pfxs: tuple = ()) -> bool:
+            for p in pfxs:
+                full = p + name
+                idx = text.find(full)
+                while idx != -1:
+                    end_idx = idx + len(full)
+                    if end_idx >= len(text):
+                        return True
+                    ch = text[end_idx]
+                    if not ('\u0E00' <= ch <= '\u0E7F'):
+                        return True
+                    for fp in follow_pfxs:
+                        if text.startswith(fp, end_idx):
+                            return True
+                    idx = text.find(full, idx + 1)
+            return False
+
+        def _add_if_match(name: str, recs: List[GeoRecord], pfxs: tuple, follow_pfxs: tuple = ()) -> None:
+            if self._wb_match(name, text) or _pfx_match(name, pfxs, follow_pfxs):
                 for r in recs:
                     if r not in seen:
                         seen.add(r)
                         pool.append(r)
 
         for sub, recs in self._sub_map.items():
-            _add_if_match(sub, recs, sub_pfxs)
+            _add_if_match(sub, recs, sub_pfxs, dist_pfxs + prov_prefixes)
         for dist, recs in self._dist_map.items():
-            _add_if_match(dist, recs, dist_pfxs)
+            _add_if_match(dist, recs, dist_pfxs, prov_prefixes)
         for prov, recs in self._prov_map.items():
             _add_if_match(prov, recs, prov_pfxs)
 

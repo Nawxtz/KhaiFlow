@@ -45,7 +45,10 @@ from constants import (
     THAI_CHAR_RE, ZIPCODE_COMPLAINT_RE, ZIPCODE_RE,
     expand_abbreviations,
 )
-from geo_engine import FuzzyGeoMatcher, GeoDatabase, RAPIDFUZZ_AVAILABLE, get_geo_strip_patterns
+from geo_engine import (
+    FuzzyGeoMatcher, GeoDatabase, RAPIDFUZZ_AVAILABLE, correct_typo,
+    get_geo_strip_patterns,
+)
 from models import CorrectionRecord, NERResult, ParseResult
 
 logger = logging.getLogger("ThaiSmartAddress")
@@ -370,23 +373,20 @@ class SmartAddressParser:
                 if len(dists) == 1:
                     result.district = dists[0]
                     result.warnings.append(f"[AutoFill] District '{result.district}' auto-filled from zipcode {result.zipcode}")
-                elif geo_rec and geo_rec.district in dists:
-                    result.district = geo_rec.district
-                    result.warnings.append(f"[AutoFill] District '{result.district}' inferred from zipcode {result.zipcode}")
-                else:
-                    result.district = dists[0]
-                    result.warnings.append(f"[AutoFill] District '{result.district}' inferred from zipcode {result.zipcode}")
             if not result.sub_district and zip_pool:
                 subs = list(dict.fromkeys(r.sub_district for r in zip_pool))
                 if len(subs) == 1:
                     result.sub_district = subs[0]
                     result.warnings.append(f"[AutoFill] Sub-district '{result.sub_district}' auto-filled from zipcode {result.zipcode}")
-                elif geo_rec and geo_rec.sub_district in subs:
-                    result.sub_district = geo_rec.sub_district
-                    result.warnings.append(f"[AutoFill] Sub-district '{result.sub_district}' inferred from zipcode {result.zipcode}")
                 else:
-                    result.sub_district = subs[0]
-                    result.warnings.append(f"[AutoFill] Sub-district '{result.sub_district}' inferred from zipcode {result.zipcode}")
+                    m = re.search(r'(?:ตำบล|แขวง|ต\.)\s*([ก-๙]+)', normalised_text)
+                    if m:
+                        match, score = correct_typo(m.group(1), subs, self._fuzzy_threshold)
+                        recs = [r for r in zip_pool if r.sub_district == match and (not result.district or r.district == result.district)]
+                        if match and recs:
+                            result.sub_district = match
+                            result.district = recs[0].district
+                            result.warnings.append(f"[FuzzyCorrection] ตำบล: '{m.group(1)}' → '{match}' ({score}%)")
 
         result.tags, text = self._extract_tags(text)
         result.receiver, result.address_detail = self._extract_receiver_and_address(text)
