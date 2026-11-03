@@ -394,6 +394,13 @@ class SmartAddressParser:
         # Strip invisible / zero-width Unicode chars
         text = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\ufeff\u00a0]", " ", text)
         text = re.sub(r"[\n\r\t]+", " ", text)
+        def _replace_o_zipcode(m: re.Match) -> str:
+            tok = m.group(1)
+            if sum(1 for c in tok if c.isdigit()) >= 3 and any(c in "Oo" for c in tok):
+                return tok.replace("O", "0").replace("o", "0")
+            return tok
+
+        text = re.sub(r"(?<![^\W_]|[\u0E00-\u0E7F])([0-9Oo]{5})(?![^\W_]|[\u0E00-\u0E7F])", _replace_o_zipcode, text)
         # Inject spaces between Thai chars and digits (no-space input like "เอกราช0894561234บ้านเลขที่9")
         text = re.sub(r'([\u0E00-\u0E7F])(\d)', r'\1 \2', text)
         text = re.sub(r'(\d)([\u0E00-\u0E7F])', r'\1 \2', text)
@@ -464,7 +471,13 @@ class SmartAddressParser:
         # Strip stray trailing dot after Thai char (end-of-string only, not mid-string)
         # Mid-string removal was breaking น.ส. → น.ส (dropped the dot before space)
         text = re.sub(r"([฀-๿])\.$", r"\1", text)
-        return re.sub(r"\s+", " ", text).strip()
+        text = re.sub(r"\s+", " ", text).strip()
+        tokens = text.split()
+        if len(tokens) >= 8 and len(tokens) % 2 == 0:
+            half = len(tokens) // 2
+            if tokens[:half] == tokens[half:]:
+                return " ".join(tokens[:half])
+        return text
 
     def _extract_phone(self, text: str) -> Tuple[Optional[str], str]:
         for m in PHONE_RE.finditer(text):
