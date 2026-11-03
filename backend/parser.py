@@ -437,6 +437,7 @@ class SmartAddressParser:
         # "...(แต่อันนี้ไม่ต้องส่งนะ)..." tells the admin to ignore that block.
         text = re.sub(r'\([^)]{2,120}(?:ไม่ต้องส่ง|ไม่ต้อง|อย่าส่ง|ยกเลิก)[^)]{0,60}\)', ' ', text)
         text = re.sub(r'(?:ออเดอร์|รหัสลูกค้า)\s*[:#\-]?\s*\d+', ' ', text)
+        text = re.sub(r'(?:ยอด(?:โอน|รวม)?|ค่าส่ง)\s*[:\-]?\s*\d[\d,]*(?:\.\d+)?\s*(?:บาท|บ\.)?', ' ', text)
         text = CHAT_JUNK_PATTERN.sub(" ", text)
         # Strip social media handle lines: "Line ID: xxx", "FB: xxx", "IG: xxx"
         # These must be removed before receiver extraction or they corrupt the name field.
