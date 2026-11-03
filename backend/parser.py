@@ -177,6 +177,18 @@ class SmartAddressParser:
         "sub_district", "district", "province", "zipcode",
     ]
 
+    _STOP_PREFIXES: Tuple[str, ...] = (
+        "ซอย", "ซ.", "ถนน", "ถ.", "ตรอก", "หมู่บ้าน", "หมู่", "ม.",
+        "อาคาร", "ตึก", "ชั้น", "ห้อง", "คอนโด", "แฟลต", "หอพัก",
+        "อพาร์ท", "อพาร์ต", "ตำบล", "อำเภอ", "จังหวัด", "แขวง", "เขต",
+        "บริษัท", "ห้างหุ้นส่วน", "หจก", "ร้าน", "โรงพยาบาล", "โรงแรม",
+        "โรงเรียน", "มหาวิทยาลัย", "เลขที่", "แอดมิน",
+    )
+
+    @classmethod
+    def _is_name_stop(cls, tok: str) -> bool:
+        return tok in NAME_STOP_WORDS or tok.startswith(cls._STOP_PREFIXES)
+
     def __init__(
         self,
         geo_db: GeoDatabase,
@@ -605,12 +617,8 @@ class SmartAddressParser:
                 if second_m:
                     candidate = second_m.group(1)
                     is_stop   = (
-                        candidate in NAME_STOP_WORDS
-                        or any(candidate.startswith(sw) for sw in NAME_STOP_WORDS)
+                        self._is_name_stop(candidate)
                         or candidate.startswith("ที่")
-                        or candidate in self._geo.district_names
-                        or candidate in self._geo.province_names
-                        or candidate in self._geo.sub_district_names
                     )
                     if not is_stop:
                         receiver  = f"{clean_span} {candidate}".strip()
@@ -639,9 +647,7 @@ class SmartAddressParser:
                     trimmed: List[str] = []
                     started = False
                     for tok in clean_name.split():
-                        is_stop = tok in NAME_STOP_WORDS or any(
-                            tok.startswith(sw) for sw in NAME_STOP_WORDS
-                        )
+                        is_stop = self._is_name_stop(tok)
                         if is_stop:
                             if started:
                                 # Stop-word after real name tokens → end of name
@@ -676,11 +682,7 @@ class SmartAddressParser:
         if receiver:
             receiver = re.sub(r"\s+ที่\s*[ก-๙]+.*$", "", receiver).strip()
             receiver = re.sub(r"[\s()\[\]{}<>\"\']+$", "", receiver).strip()
-            if (
-                len(receiver) < 2
-                or receiver in NAME_STOP_WORDS
-                or any(receiver.startswith(sw) for sw in NAME_STOP_WORDS)
-            ):
+            if len(receiver) < 2 or self._is_name_stop(receiver):
                 receiver = None
 
         # [FIX-P3] Pass D: Trailing personal name.
@@ -699,7 +701,7 @@ class SmartAddressParser:
             # characters, not digits. We guard quality with token validation below.
             if remaining:
                 tail_m = re.search(
-                    r"(?:^|\s)((?:[^\s\d/]{2,12}\s*){1,2})\s*$",
+                    r"(?:^|\s)((?:[^\s\d/]{2,20}\s*){1,2})\s*$",
                     remaining
                 )
                 if tail_m:
@@ -709,8 +711,7 @@ class SmartAddressParser:
                         len(tokens) >= 1 and
                         all(
                             re.search(r"[฀-๿]", t) and
-                            t not in NAME_STOP_WORDS and
-                            not any(t.startswith(sw) for sw in NAME_STOP_WORDS) and
+                            not self._is_name_stop(t) and
                             not re.search(r"\d", t)
                             for t in tokens
                         )
