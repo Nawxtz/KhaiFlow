@@ -21,6 +21,8 @@ Uses the built-in mock geo database — no CSV file required.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import math
 import os
 import sys
@@ -989,12 +991,27 @@ def run_evaluation(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
     micro_rec = total_tp / (total_tp + total_fn) if (total_tp + total_fn) > 0 else 0.0
     micro_f1 = (2 * micro_prec * micro_rec / (micro_prec + micro_rec)) if (micro_prec + micro_rec) > 0 else 0.0
 
+    total_intent = tp + tn + fp + fn
+    intent_precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+    intent_recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+    intent_accuracy = (tp + tn) / total_intent if total_intent > 0 else 0.0
+    intent = {
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
+        "precision": intent_precision,
+        "recall": intent_recall,
+        "accuracy": intent_accuracy,
+    }
+
     return {
         "field_correct":      field_correct,
         "field_total":        field_total,
         "tag_correct":        tag_correct,
         "tag_total":          tag_total,
         "tp": tp, "tn": tn, "fp": fp, "fn": fn,
+        "intent":             intent,
         "fuzzy_correct":      fuzzy_correct,
         "fuzzy_total":        fuzzy_total,
         "timings":            timings,
@@ -1048,6 +1065,24 @@ def format_report(results: dict, total_cases: int) -> str:
             continue
         acc = correct / total
         A(f"  {f:<15} {bar(acc)}  {acc:.1%}  ({correct}/{total})")
+    A("")
+
+    # ── Field Precision / Recall / F1 ──────────────────────────────────────────
+    A("── Field Precision / Recall / F1 ────────────────────────────")
+    scored_fields = ["province", "zipcode", "district", "sub_district", "phone"]
+    field_prf = results.get("field_prf", {})
+    for f in scored_fields:
+        if f in field_prf:
+            prf = field_prf[f]
+            prec = prf["precision"]
+            rec = prf["recall"]
+            f1 = prf["f1"]
+            sup = prf["support"]
+            A(f"  {f:<15} Precision: {prec:.1%}  Recall: {rec:.1%}  F1: {f1:.1%}  (support: {sup})")
+    macro_f1 = results.get("macro_f1", 0.0)
+    micro_f1 = results.get("micro_f1", 0.0)
+    A(f"  Macro-F1: {macro_f1:.1%}")
+    A(f"  Micro-F1: {micro_f1:.1%}")
     A("")
 
     # ── Tag Detection ──────────────────────────────────────────────────────────
@@ -1188,6 +1223,50 @@ def format_robustness(r: dict) -> str:
     return "\n".join(lines)
 
 
+def metrics_summary(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
+    results = run_evaluation(dataset, parser)
+    cases = len(dataset)
+    address_cases = sum(1 for c in dataset if c.expect_address)
+    non_address_cases = cases - address_cases
+    d = [(c.input, c.expect_address) for c in dataset]
+    sha256_16 = hashlib.sha256(json.dumps(d, ensure_ascii=False).encode()).hexdigest()[:16]
+
+    field_accuracy = {
+        f: {
+            "correct": results["field_correct"][f],
+            "total": results["field_total"][f],
+            "accuracy": (results["field_correct"][f] / results["field_total"][f]) if results["field_total"][f] > 0 else 0.0,
+        }
+        for f in results["field_correct"]
+    }
+
+    tag_correct = results["tag_correct"]
+    tag_total = results["tag_total"]
+    tag_accuracy = (tag_correct / tag_total) if tag_total > 0 else 0.0
+
+    return {
+        "method": "rule-based regex and fuzzy matching, offline (mock geo database)",
+        "dataset": {
+            "cases": cases,
+            "address_cases": address_cases,
+            "non_address_cases": non_address_cases,
+            "sha256_16": sha256_16,
+        },
+        "intent": results["intent"],
+        "field_accuracy": field_accuracy,
+        "field_prf": results["field_prf"],
+        "macro_f1": results["macro_f1"],
+        "micro_f1": results["micro_f1"],
+        "tags": {
+            "correct": tag_correct,
+            "total": tag_total,
+            "accuracy": tag_accuracy,
+        },
+        "latency_ms": latency_summary(results["timings"]),
+        "noise_robustness": noise_robustness(dataset, parser),
+    }
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1196,6 +1275,8 @@ def main():
     arg_parser = argparse.ArgumentParser(description="ThaiSmartAddress Evaluation")
     arg_parser.add_argument("--output", "-o", default=None,
                             help="Also save report to this file (e.g. report.txt)")
+    arg_parser.add_argument("--json", default=None,
+                            help="Path to write metrics summary JSON")
     args = arg_parser.parse_args()
 
     print("Loading parser with mock geo database...")
@@ -1214,6 +1295,11 @@ def main():
         with open(args.output, "w", encoding="utf-8") as f:
             f.write(report)
         print(f"\nReport saved to: {args.output}")
+
+    if args.json:
+        summary_data = metrics_summary(DATASET, parser)
+        with open(args.json, "w", encoding="utf-8") as f:
+            json.dump(summary_data, f, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":
