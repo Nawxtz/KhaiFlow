@@ -437,7 +437,7 @@ DATASET: List[EvalCase] = [
     ),
     EvalCase(
         input="ส่งก่อนบ่าย คุณมานี 88/1 ต.คลองหลวง อ.คลองหลวง จ.ปทุมธานี 12120",
-        category="tags", description="Time_sensitive tag",
+        category="tags", description="Delivery-time phrase tagged Urgent",
         expect_address=True,
         expected={"province": "ปทุมธานี", "zipcode": "12120"},
         expect_tags=["Urgent"],
@@ -1137,6 +1137,57 @@ def format_report(results: dict, total_cases: int) -> str:
     return "\n".join(lines)
 
 
+NOISE_TRANSFORMS = [
+    ("chat_prefix", lambda s: "สวัสดีค่ะ รบกวนส่งที่นี่นะคะ " + s),
+    ("emoji_suffix", lambda s: s + " ขอบคุณค่ะ 🙏😊"),
+    ("newlines", lambda s: s.replace(" ", "\n")),
+]
+
+
+def noisy_dataset(dataset: List[EvalCase]) -> List[EvalCase]:
+    noisy = []
+    for case in dataset:
+        if not case.expect_address:
+            continue
+        for name, fn in NOISE_TRANSFORMS:
+            noisy.append(
+                EvalCase(
+                    input=fn(case.input),
+                    category=f"noise:{name}",
+                    description=case.description,
+                    expect_address=True,
+                    expected=case.expected,
+                    expect_tags=case.expect_tags,
+                    is_fuzzy=case.is_fuzzy,
+                )
+            )
+    return noisy
+
+
+def noise_robustness(dataset: List[EvalCase], parser: SmartAddressParser) -> dict:
+    address_cases = [c for c in dataset if c.expect_address]
+    clean_micro_f1 = run_evaluation(address_cases, parser)["micro_f1"]
+    noisy = noisy_dataset(dataset)
+    per_transform = {}
+    for name, _ in NOISE_TRANSFORMS:
+        transform_cases = [c for c in noisy if c.category == f"noise:{name}"]
+        per_transform[name] = run_evaluation(transform_cases, parser)["micro_f1"]
+    noisy_mean = sum(per_transform.values()) / len(per_transform) if per_transform else 0.0
+    retention = noisy_mean / clean_micro_f1 if clean_micro_f1 else 0.0
+    return {
+        "clean_micro_f1": clean_micro_f1,
+        "per_transform": per_transform,
+        "retention": retention,
+    }
+
+
+def format_robustness(r: dict) -> str:
+    lines = [f"F1 retention: {r['retention']:.1%}"]
+    for name, f1 in r["per_transform"].items():
+        lines.append(f"{name}: {f1:.1%}")
+    return "\n".join(lines)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1157,6 +1208,7 @@ def main():
     report  = format_report(results, len(DATASET))
 
     print(report)
+    print(format_robustness(noise_robustness(DATASET, parser)))
 
     if args.output:
         with open(args.output, "w", encoding="utf-8") as f:
