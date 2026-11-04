@@ -349,9 +349,24 @@ class SmartAddressParser:
         geo_rec, geo_score, geo_warns = self._geo.lookup(text, zipcode_hint=result.zipcode)
         result.warnings.extend(geo_warns)
 
+        # A bare word equal to a sub-district (e.g. a surname) must not beat a district the customer typed:
+        # when the record's district is not in the text, look again without that word.
+        if geo_rec and geo_rec.sub_district and not self._geo._wb_match(geo_rec.district, text) and not any(
+            (p + geo_rec.district) in text for p in ("อำเภอ", "เขต")
+        ):
+            alt_rec, alt_score, _ = self._geo.lookup(text.replace(geo_rec.sub_district, " "), zipcode_hint=result.zipcode)
+            if (
+                alt_rec and alt_rec.province == geo_rec.province and alt_rec.district != geo_rec.district
+                and any((p + alt_rec.district) in text for p in ("อำเภอ", "เขต"))
+            ):
+                geo_rec, geo_score = alt_rec, alt_score
+
         if geo_rec:
             _SUB_PFXS = ("ตำบล", "แขวง", "ต.", "แขวง ", "ต ")
-            if self._geo._wb_match(geo_rec.sub_district, text) or any((pfx + geo_rec.sub_district) in text for pfx in _SUB_PFXS):
+            if self._geo._wb_match(geo_rec.sub_district, text) or any(
+                re.search(re.escape(pfx + geo_rec.sub_district) + r"(?![\u0E00-\u0E7F])|" + re.escape(pfx + geo_rec.sub_district) + r"(?=อ\.|อำเภอ|เขต|จ\.|จังหวัด)", text)
+                for pfx in _SUB_PFXS
+            ):
                 result.sub_district = geo_rec.sub_district
 
             _DIST_PFXS = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
@@ -398,6 +413,7 @@ class SmartAddressParser:
                             result.sub_district = match
                             result.district = recs[0].district
                             result.warnings.append(f"[FuzzyCorrection] ตำบล: '{m.group(1)}' → '{match}' ({score}%)")
+                            text = re.sub(r"\s+", " ", re.sub(r"(?:ตำบล|แขวง)?\s*" + re.escape(m.group(1)), " ", text)).strip()
 
         result.tags, text = self._extract_tags(text)
         result.receiver, result.address_detail = self._extract_receiver_and_address(text)
@@ -705,6 +721,7 @@ class SmartAddressParser:
                 break
             text = text[gm.end():].strip()
         text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?\s*เลย(?:\s*(?:นะคะ|นะค่ะ|นะ|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
+        text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?(?:\s*(?:นะคะ|นะค่ะ|นะครับ|นะ|ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
         text = CONNECTOR_PATTERN.sub(" ", text)
         text = re.sub(r"\b(ด้วยนะ|หน่อยนะ|ด้วย)\b", " ", text)
         text = re.sub(r'[ก-๙A-Za-z_]+\s*[:\-]\s*', ' ', text)  # FIX-R1 orphan labels
