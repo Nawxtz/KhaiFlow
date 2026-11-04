@@ -364,7 +364,8 @@ class SmartAddressParser:
             result.province = geo_rec.province
             if (result.sub_district or result.district) and not result.zipcode:
                 result.zipcode = geo_rec.zipcode
-                result.warnings.append(f"[AutoFill] Zipcode '{geo_rec.zipcode}' auto-filled from database")
+                if not (geo_score == 9 and not geo_warns and result.sub_district and result.district and result.province):
+                    result.warnings.append(f"[AutoFill] Zipcode '{geo_rec.zipcode}' auto-filled from database")
             text = self._strip_geo_tokens(text, geo_rec)
 
         # Zipcode-driven Auto-Fill: Infer missing province, district, and sub-district from Zipcode
