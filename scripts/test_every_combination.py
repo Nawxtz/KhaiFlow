@@ -38,8 +38,8 @@ geo.load_csv(csv_candidate)
 parser = SmartAddressParser(geo)
 
 BACKEND_URL = "https://khaiflow-backend-production.up.railway.app"
-LINE_CHANNEL_SECRET = "6ba15a389dda488c0dc9bf45af08e6e4"
-LINE_CHANNEL_ACCESS_TOKEN = "7j/Tb6zW+PU+gALE/rt0gFs05tYWX3lYQf+YqF5VNOa0k7EF0vppFeSpC2EZjf1Nj3AOkfQsAYBSYmaHqEEO6XubBnXHaD53hJ+jjXWID7nyTBuKPW6R7iuJrEDR1BldMrIXnPirABDZewfw2CEKk49PbdgDzCFqoOLOYbqAITQ="
+LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")  # never hard-code; the old values leaked
+LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 
 
 def sign_payload(body_bytes: bytes, secret: str = LINE_CHANNEL_SECRET) -> str:
