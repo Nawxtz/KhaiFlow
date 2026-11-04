@@ -755,6 +755,8 @@ class SmartAddressParser:
                     is_stop   = (
                         self._is_name_stop(candidate)
                         or candidate.startswith("ที่")
+                        or candidate in ("ก่อน", "เดิม")
+                        or candidate.startswith("ขอเบิก")
                     )
                     if not is_stop:
                         receiver  = f"{clean_span} {candidate}".strip()
