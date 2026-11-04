@@ -1051,6 +1051,9 @@ class SmartAddressParser:
                 result.warnings.append(f"[AutoFill] Zipcode '{fuzzy_rec.zipcode}' auto-filled from database")
             for c in corrections:
                 result.warnings.append(f"[FuzzyCorrection] {c}")
+                m_src = re.match(r"(?:ตำบล|อำเภอ): '((?:ตำบล|อำเภอ|แขวง|เขต|ต\.|อ\.)[^']+)' →", c)
+                if m_src and result.address_detail and m_src.group(1) in result.address_detail:
+                    result.address_detail = re.sub(r"\s{2,}", " ", result.address_detail.replace(m_src.group(1), " ")).strip() or None
 
         return result
 

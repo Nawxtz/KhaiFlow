@@ -79,6 +79,7 @@ def _extract_receiver_tokens(text: str) -> Set[str]:
         if clean_span in NAME_STOP_WORDS or any(clean_span.startswith(sw) for sw in NAME_STOP_WORDS):
             continue
         receiver_tokens.update(re.split(r"[\s,\-/]+", clean_span))
+        receiver_tokens.add(hm.group("n"))
         after = text[hm.end():]
         m2 = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", after)
         if m2 and m2.group(1) not in NAME_STOP_WORDS:
@@ -700,6 +701,8 @@ class FuzzyGeoMatcher:
                     break
 
             if stripped in receiver_tokens or len(stripped) < 2:
+                continue
+            if pfx_type is None and stripped in ("หมู่", "หมู่ที่", "หมู่บ้าน", "ซอย", "ถนน", "ตรอก"):
                 continue
 
             if (stripped in used_dist_prov or token in used_dist_prov) and pfx_type != "sub":
