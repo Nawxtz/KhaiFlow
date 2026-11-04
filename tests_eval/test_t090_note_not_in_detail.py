@@ -1,0 +1,31 @@
+"""T-090: delivery note must not stay in address_detail."""
+import os
+
+from geo_engine import GeoDatabase
+from parser import SmartAddressParser
+
+FULL = SmartAddressParser(GeoDatabase().load_csv(os.path.join(os.getcwd(), "data/thai_address_full.csv")))
+
+WITH_NOTE = 'พี่ต้น 0822340227 77 ถ.เพชรเกษม ต.หาดใหญ่ อ.หาดใหญ่ จ.สงขลา 90110 วางไว้ที่ป้อมยามได้เลยค่ะ'
+PLAIN = 'พี่ต้น 0822340227 77 ถ.เพชรเกษม ต.หาดใหญ่ อ.หาดใหญ่ จ.สงขลา 90110'
+LEAKS = ['วางไว้ที่']
+HOUSE = '77'
+
+
+def test_note_dropped_from_detail():
+    d = FULL.parse(WITH_NOTE).address_detail or ""
+    for leak in LEAKS:
+        assert leak not in d
+
+
+def test_house_number_kept_in_detail():
+    d = FULL.parse(WITH_NOTE).address_detail or ""
+    assert HOUSE in d
+
+
+def test_plain_address_unchanged_and_still_clean():
+    r = FULL.parse(PLAIN)
+    for leak in LEAKS:
+        assert leak not in (r.address_detail or "")
+    assert HOUSE in (r.address_detail or "")
+    assert r.status == FULL.parse(WITH_NOTE).status
