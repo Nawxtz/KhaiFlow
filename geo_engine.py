@@ -67,6 +67,31 @@ except ImportError:
     )
 
 
+def _extract_receiver_tokens(text: str) -> Set[str]:
+    receiver_tokens: Set[str] = set()
+    m_lbl = RECEIVER_LABEL_RE.search(text)
+    if m_lbl:
+        receiver_tokens.update(re.split(r"[\s,\-/]+", m_lbl.group(1)))
+    for hm in HONORIFIC_PATTERN.finditer(text):
+        clean_span = text[hm.start():hm.end()].strip()
+        if clean_span in NAME_STOP_WORDS or any(clean_span.startswith(sw) for sw in NAME_STOP_WORDS):
+            continue
+        receiver_tokens.update(re.split(r"[\s,\-/]+", clean_span))
+        after = text[hm.end():]
+        m2 = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", after)
+        if m2 and m2.group(1) not in NAME_STOP_WORDS:
+            receiver_tokens.add(m2.group(1))
+            after2 = after[m2.end():]
+            m3 = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", after2)
+            if m3 and m3.group(1) not in NAME_STOP_WORDS:
+                w3 = m3.group(1)
+                if all("\u0E00" <= c <= "\u0E7F" for c in w3) and not any(
+                    w3.startswith(p) for p in ("ต.", "อ.", "จ.", "ตำบล", "อำเภอ", "จังหวัด", "แขวง", "เขต")
+                ):
+                    receiver_tokens.add(w3)
+    return receiver_tokens
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # GEO DATABASE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -324,7 +349,7 @@ class GeoDatabase:
                 r for r in self._build_candidate_pool(text, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS)
                 if get_sub_matches(r.sub_district)
                 and get_dist_matches(r.district, r.province)
-                and any(m[2] for m in get_prov_matches(r.province))
+                and get_prov_matches(r.province)
             ]
             if full_pool:
                 pool = full_pool
@@ -379,7 +404,17 @@ class GeoDatabase:
                     "provide zipcode to resolve"
                 )
 
-        return best_rec, best_score, warnings_out
+        out_rec: Optional[GeoRecord] = best_rec
+        if out_rec and out_rec.sub_district:
+            rt = _extract_receiver_tokens(text)
+            if out_rec.sub_district in rt and not any((pfx + out_rec.sub_district) in text for pfx in _SUB_PFXS):
+                best_score -= 4
+                if best_score <= 0:
+                    out_rec = None
+                else:
+                    out_rec = GeoRecord(sub_district="", district=out_rec.district, province=out_rec.province, zipcode=out_rec.zipcode)
+
+        return out_rec, best_score, warnings_out
 
     def _build_candidate_pool(
         self,
@@ -622,19 +657,7 @@ class FuzzyGeoMatcher:
             except Exception:
                 tokens.append(tok)
 
-        receiver_tokens: Set[str] = set()
-        m_lbl = RECEIVER_LABEL_RE.search(text)
-        if m_lbl:
-            receiver_tokens.update(re.split(r"[\s,\-/]+", m_lbl.group(1)))
-        for hm in HONORIFIC_PATTERN.finditer(text):
-            clean_span = text[hm.start():hm.end()].strip()
-            if clean_span in NAME_STOP_WORDS or any(clean_span.startswith(sw) for sw in NAME_STOP_WORDS):
-                continue
-            receiver_tokens.update(re.split(r"[\s,\-/]+", clean_span))
-            after = text[hm.end():]
-            m2 = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", after)
-            if m2 and m2.group(1) not in NAME_STOP_WORDS:
-                receiver_tokens.add(m2.group(1))
+        receiver_tokens = _extract_receiver_tokens(text)
 
         used_dist_prov: Set[str] = set()
         exact_rec, _, _ = self._geo.lookup(text, zipcode_hint=zipcode_hint)
