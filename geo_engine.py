@@ -679,6 +679,7 @@ class FuzzyGeoMatcher:
 
         best_score = 0
         best_rec: Optional[GeoRecord] = None
+        sub_hits: List[str] = []
 
         for token in tokens:
             if token in HONORIFIC_SKIP_SET or token in receiver_tokens:
@@ -705,6 +706,7 @@ class FuzzyGeoMatcher:
             tok_best_score = 0
             tok_best_rec: Optional[GeoRecord] = None
             tok_best_label = ""
+            tok_best_match = ""
 
             checks: List[Tuple[List[str], Callable[[str], List[GeoRecord]], int, str]] = [
                 (subs,  self._geo.records_for_sub_district, 4, "ตำบล"),
@@ -737,11 +739,26 @@ class FuzzyGeoMatcher:
                         tok_best_rec   = recs[0]
                         tok_best_score = score
                         tok_best_label = f"{label_prefix}: '{token}' → '{match}' ({score}%)"
+                        tok_best_match = match
 
             if tok_best_rec and tok_best_score > best_score:
                 best_rec   = tok_best_rec
                 best_score = tok_best_score
                 corrections.append(tok_best_label)
+            if tok_best_rec and pfx_type == "sub" and tok_best_label.startswith("ตำบล"):
+                sub_hits.append(tok_best_match)
+
+        # A sub-district typed with its own prefix and fuzzy-matched inside the winning district beats the
+        # district-level record (whose sub-district is arbitrary).
+        if best_rec:
+            for sub_name in sub_hits:
+                same = [
+                    r for r in self._geo.records_for_sub_district(sub_name)
+                    if r.district == best_rec.district and r.province == best_rec.province
+                ]
+                if len(same) == 1:
+                    best_rec = same[0]
+                    break
 
         if not best_rec:
             warnings_out.append(f"Fuzzy geo found no match above threshold={threshold}")

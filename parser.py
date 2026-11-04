@@ -295,7 +295,7 @@ class SmartAddressParser:
         before = text[: m.start()].strip()
         after = text[m.end() :].lstrip()
         return bool(
-            re.search(r"ยอด\s*$", before) or
+            re.search(r"(?:^|[^฀-๿]|โอน|รวม|ชำระ|จ่าย)ยอด\s*$", before) or
             after.startswith("บาท")
         )
 
@@ -546,7 +546,7 @@ class SmartAddressParser:
         # "...(แต่อันนี้ไม่ต้องส่งนะ)..." tells the admin to ignore that block.
         text = re.sub(r'\([^)]{2,120}(?:ไม่ต้องส่ง|ไม่ต้อง|อย่าส่ง|ยกเลิก)[^)]{0,60}\)', ' ', text)
         text = re.sub(r'(?:เลข)?(?:ออเดอร์|(?i:order)|รหัสลูกค้า)\s*[:#\-]?\s*#?[A-Za-z]{0,3}\d+', ' ', text)
-        text = re.sub(r'(?:ยอด(?:โอน|รวม)?|ค่าส่ง)\s*[:\-]?\s*\d[\d,]*(?:\.\d+)?\s*(?:บาท|บ\.)?', ' ', text)
+        text = re.sub(r'(?:(?:(?<![฀-๿])|(?<=โอน)|(?<=รวม)|(?<=ชำระ)|(?<=จ่าย))ยอด(?:โอน|รวม)?|ค่าส่ง)\s*[:\-]?\s*\d[\d,]*(?:\.\d+)?\s*(?:บาท|บ\.)?', ' ', text)
         text = re.sub(r'(?:ราคา\s*[:\-]?\s*)?(?<![\d/.,])\d[\d,]*(?:\.\d+)?\s*บาท', ' ', text)
         text = CHAT_JUNK_PATTERN.sub(" ", text)
         # Strip social media handle lines: "Line ID: xxx", "FB: xxx", "IG: xxx"
@@ -568,7 +568,7 @@ class SmartAddressParser:
         text = re.sub(r'โทร(?:ไป|หา)?ก่อน(?:ส่ง|ถึง)?(?:นะ(?:คะ|ครับ)?)?', ' ', text)
         # Strip phone labels WITH optional trailing colon/dash
         text = re.sub(
-            r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร\.?|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
+            r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร(?![\u0e31\u0e34-\u0e3a\u0e47-\u0e4e])\.?|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
             ' ', text
         )
         text = re.sub(r'([฀-๿])(\d)', r'\1 \2', text)
@@ -704,6 +704,7 @@ class SmartAddressParser:
             if not gm or not gm.group(0).strip():
                 break
             text = text[gm.end():].strip()
+        text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?\s*เลย(?:\s*(?:นะคะ|นะค่ะ|นะ|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
         text = CONNECTOR_PATTERN.sub(" ", text)
         text = re.sub(r"\b(ด้วยนะ|หน่อยนะ|ด้วย)\b", " ", text)
         text = re.sub(r'[ก-๙A-Za-z_]+\s*[:\-]\s*', ' ', text)  # FIX-R1 orphan labels
@@ -958,6 +959,7 @@ class SmartAddressParser:
             r"(?:ไม่ต้อง|อย่า)\s*กดกริ่ง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
             r"(?:ไม่อยู่บ้าน)?ฝากเพื่อนบ้าน(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
             r"(?:^|\s)ถึงแล้ว(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?(?=\s|$)",
+            r"(?:^|\s)(?:มาก่อน\s*)?ถึงแล้วบอก(?:ด้วย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?(?=\s|$)",
             r"ไม่ต้อง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
             r"(?:ส่ง)?ตามรอบ(?:ปกติ)?(?:ได้)?(?:เลย)?(?:ครับ|ค่ะ|นะคะ)?",
             r"ส่ง(?:ได้ตาม)?ปกติ(?:ครับ|ค่ะ)?",
