@@ -33,16 +33,16 @@ import time
 import threading
 import unicodedata
 import warnings as _warnings
-from typing import Dict, List, Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 from constants import (
-    ABBREV_EXPAND, ADDRESS_DETAIL_RE, CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
+    ADDRESS_DETAIL_RE, CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
     COURIER_STRIP_RE,
-    FUZZY_THRESHOLD, GREETING_LEAD_PATTERN, HONORIFIC_PATTERN, HONORIFIC_SKIP_SET,
+    FUZZY_THRESHOLD, GREETING_LEAD_PATTERN, HONORIFIC_PATTERN,
     INTENT_NEG_KEYWORDS,
     NAME_STOP_WORDS, NER_FALLBACK_THRESHOLD,
-    PHONE_LABEL_PATTERN, PHONE_RE, RECEIVER_LABEL_RE, TAG_PATTERNS,
-    THAI_CHAR_RE, ZIPCODE_COMPLAINT_RE, ZIPCODE_RE,
+    PHONE_RE, RECEIVER_LABEL_RE, TAG_PATTERNS,
+    ZIPCODE_COMPLAINT_RE, ZIPCODE_RE,
     expand_abbreviations,
 )
 from geo_engine import (
@@ -746,11 +746,6 @@ class SmartAddressParser:
         # e.g. "คุณจิรายุ" → receiver = "คุณจิรายุ" (not just "จิรายุ")
         if receiver is None:
             for hm in HONORIFIC_PATTERN.finditer(text):
-                try:
-                    name_token = hm.group("n")
-                except IndexError:
-                    name_token = hm.group(1)
-
                 start_idx = hm.start()
                 end_idx   = hm.end()
 
