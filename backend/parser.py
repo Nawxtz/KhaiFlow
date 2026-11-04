@@ -564,6 +564,8 @@ class SmartAddressParser:
             r'(?:^|(?<=\s))[(\[{<（【［｛](ผู้รับ|ชื่อผู้รับ|ชื่อลูกค้า|ลูกค้าชื่อ|ผู้รับคือ|ชื่อจริง|ชื่อเล่น|ชื่อ|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร|tel|ติดต่อ|เบอร์|ที่อยู่|ตำบล|อำเภอ|จังหวัด|ไปรษณีย์|รหัสไปรษณีย์)[)\]}>）】］｝]',
             r'\1', text, flags=re.IGNORECASE
         )
+        # A call-before-delivery request ("โทรก่อนส่ง") is not a phone label: drop it whole
+        text = re.sub(r'โทร(?:ไป)?ก่อน(?:ส่ง)?(?:นะ(?:คะ|ครับ)?)?', ' ', text)
         # Strip phone labels WITH optional trailing colon/dash
         text = re.sub(
             r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร\.?|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
