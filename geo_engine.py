@@ -343,7 +343,9 @@ class GeoDatabase:
             return prov_cache[prov]
 
         if zipcode_hint and zipcode_hint in self._zip_map and not any(
-            get_sub_matches(r.sub_district) or get_dist_matches(r.district, r.province) for r in pool
+            (get_sub_matches(r.sub_district) or get_dist_matches(r.district, r.province))
+            and get_prov_matches(r.province)
+            for r in pool
         ):
             full_pool = [
                 r for r in self._build_candidate_pool(text, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS)
@@ -407,7 +409,13 @@ class GeoDatabase:
         out_rec: Optional[GeoRecord] = best_rec
         if out_rec and out_rec.sub_district:
             rt = _extract_receiver_tokens(text)
-            if out_rec.sub_district in rt and not any((pfx + out_rec.sub_district) in text for pfx in _SUB_PFXS):
+            if (
+                out_rec.sub_district in rt
+                and not any((pfx + out_rec.sub_district) in text for pfx in _SUB_PFXS)
+                and not re.search(
+                    re.escape(out_rec.sub_district) + r"\s*(?:อ\.|อำเภอ|เขต)?\s*" + re.escape(out_rec.district), text
+                )
+            ):
                 best_score -= 4
                 if best_score <= 0:
                     out_rec = None
