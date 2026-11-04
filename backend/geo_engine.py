@@ -57,6 +57,7 @@ except ImportError:
 RAPIDFUZZ_AVAILABLE = False
 try:
     from rapidfuzz import process as _fuzz_process, fuzz as _fuzz  # type: ignore
+    from rapidfuzz.distance import DamerauLevenshtein as _DamerauLevenshtein  # type: ignore
     RAPIDFUZZ_AVAILABLE = True
     logger.info("RapidFuzz detected — fuzzy typo correction enabled")
 except ImportError:
@@ -69,6 +70,7 @@ except ImportError:
 
 def _extract_receiver_tokens(text: str) -> Set[str]:
     receiver_tokens: Set[str] = set()
+    text = text.replace("(", " ").replace(")", " ")
     m_lbl = RECEIVER_LABEL_RE.search(text)
     if m_lbl:
         receiver_tokens.update(re.split(r"[\s,\-/]+", m_lbl.group(1)))
@@ -514,14 +516,14 @@ class GeoDatabase:
 def get_geo_strip_patterns(rec: GeoRecord):
     """Return compiled (prefix_pattern, bare_pattern) pairs for sub/dist/prov."""
     result = []
-    for value, prefixes in [
-        (rec.sub_district, r"(?:ตำบล|แขวง)\s*"),
-        (rec.district,     r"(?:อำเภอ|เขต)\s*"),
-        (rec.province,     r"(?:จังหวัด)\s*"),
+    for value, prefixes, tail in [
+        (rec.sub_district, r"(?:ตำบล|แขวง)\s*", r"(?:(?![\u0E00-\u0E7F])|(?=อำเภอ|เขต|จังหวัด))"),
+        (rec.district,     r"(?:อำเภอ|เขต)\s*", ""),
+        (rec.province,     r"(?:จังหวัด)\s*", ""),
     ]:
         esc = re.escape(value)
         result.append((
-            re.compile(rf"{prefixes}{esc}"),
+            re.compile(rf"{prefixes}{esc}{tail}"),
             re.compile(rf"(?<!\S){esc}(?!\S)"),
         ))
     return result
@@ -552,6 +554,10 @@ def correct_typo(
         result = _fuzz_process.extractOne(word, filtered, scorer=_fuzz.ratio, score_cutoff=adjusted)
         if result:
             match, score, _ = result
+            # Equal ratio scores: prefer the candidate fewest edits away, an adjacent swap counting as one.
+            ties = [c for c in filtered if _fuzz.ratio(word, c) >= score]
+            if len(ties) > 1:
+                match = min(ties, key=lambda c: _DamerauLevenshtein.distance(word, c))
             return match, int(score)
     except Exception as exc:
         logger.warning("RapidFuzz error: %s", exc)
@@ -638,7 +644,7 @@ class FuzzyGeoMatcher:
 
         # Extract Thai token candidates from the text
         raw_tokens = [
-            t for t in re.split(r"[\s,\-/]+", text)
+            t for t in re.split(r"[\s,\-/()]+", text)
             if len(t) >= 2 and re.search(r"[\u0E00-\u0E7F]", t)
         ]
         tokens: List[str] = []
