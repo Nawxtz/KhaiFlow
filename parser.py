@@ -243,10 +243,15 @@ class SmartAddressParser:
             )
             return result
 
+        normalised, is_multi = self._split_multi_address(text, normalised)
+
         # Phase A: Rule-Based Core (receives pre-normalised text)
         result = self._rule_based_parse(normalised, t0)
         if result.status == "Error":
             return result
+
+        if is_multi:
+            result.warnings.append("[MultiAddress] Multiple addresses detected in one message")
 
         if kb_converted:
             result.warnings.append("[KeyboardFallback] Input auto-converted to Thai")
@@ -393,6 +398,84 @@ class SmartAddressParser:
         return result
 
     # ── Step helpers ──────────────────────────────────────────────────────────
+
+    _MULTI_GEO_RE = re.compile(
+        r"ตำบล|แขวง|อำเภอ|เขต|จังหวัด|(?<!\d)\d{5}(?!\d)|(?<!\S)[ตอจ]\s+[ก-๙]"
+    )
+
+    def _find_phones(self, text: str) -> List[Tuple[re.Match, str]]:
+        out: List[Tuple[re.Match, str]] = []
+        for m in PHONE_RE.finditer(text):
+            if m.start() > 0 and text[m.start() - 1].isdigit():
+                if m.start() < 5 or text[m.start() - 5 : m.start()] not in self._valid_zips:
+                    continue
+            p = re.sub(r"[\s\-\./]", "", m.group())
+            if p.startswith("+66"):
+                p = "0" + p[3:]
+            elif p.startswith("66") and not p.startswith("0"):
+                p = "0" + p[2:]
+            out.append((m, p))
+        return out
+
+    def _has_geo_signal(self, seg: str) -> bool:
+        if self._MULTI_GEO_RE.search(seg):
+            return True
+        rec, _, _ = self._geo.lookup(seg)
+        return rec is not None
+
+    def _split_multi_address(self, raw_text: str, normalised: str) -> Tuple[str, bool]:
+        num_m = re.search(r"(?:^|\s)1[.)]\s+(.+?)\s+2[.)]\s+(.+)$", normalised)
+        if num_m:
+            part1, part2 = num_m.group(1).strip(), num_m.group(2).strip()
+            if self._find_phones(part1) and self._has_geo_signal(part1) and self._has_geo_signal(part2):
+                return part1, True
+
+        phones = self._find_phones(normalised)
+        if len(phones) < 2:
+            return normalised, False
+
+        if "\n" in raw_text:
+            lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+            for k in range(1, len(lines)):
+                head_raw = "\n".join(lines[:k])
+                tail_raw = "\n".join(lines[k:])
+                if re.match(r"^\s*1[.)]\s+", head_raw) and re.match(r"^\s*2[.)]\s+", tail_raw):
+                    head_raw = re.sub(r"^\s*1[.)]\s+", "", head_raw)
+                try:
+                    head_norm = self._normalise(head_raw)
+                    tail_norm = self._normalise(tail_raw)
+                except ValueError:
+                    continue
+                p_head = self._find_phones(head_norm)
+                p_tail = self._find_phones(tail_norm)
+                if (
+                    p_head
+                    and p_tail
+                    and p_head[0][1] != p_tail[0][1]
+                    and self._has_geo_signal(head_norm)
+                    and self._has_geo_signal(tail_norm)
+                ):
+                    return head_norm, True
+
+        m1, p1 = phones[0]
+        for m2, p2 in phones[1:]:
+            if p2 == p1:
+                continue
+            before1 = normalised[: m1.start()]
+            between = normalised[m1.end() : m2.start()]
+            after2 = normalised[m2.end() :]
+            if sum(1 for s in (before1, between, after2) if self._has_geo_signal(s)) >= 2:
+                if self._has_geo_signal(before1):
+                    return normalised[: m1.end()].strip(), True
+                slash_m = re.search(r"\s+[/|;]\s+", between)
+                if slash_m and self._has_geo_signal(between[: slash_m.start()]):
+                    return normalised[: m1.end() + slash_m.start()].strip(), True
+                zip_m = ZIPCODE_RE.search(between)
+                if zip_m:
+                    return normalised[: m1.end() + zip_m.end()].strip(), True
+                return normalised[: m2.start()].strip(), True
+
+        return normalised, False
 
     @staticmethod
     def _normalise(text: str) -> str:
@@ -1039,6 +1122,8 @@ class SmartAddressParser:
             needs_confirm_reasons.append("zipcode does not match province")
         if any("not found in geo DB" in w for w in result.warnings):
             needs_confirm_reasons.append("unknown zipcode")
+        if any("MultiAddress" in w for w in result.warnings):
+            needs_confirm_reasons.append("multiple addresses in message")
 
         if needs_confirm_reasons:
             result.status     = "Needs confirmation"
