@@ -565,7 +565,7 @@ class SmartAddressParser:
             r'\1', text, flags=re.IGNORECASE
         )
         # A call-before-delivery request ("โทรก่อนส่ง") is not a phone label: drop it whole
-        text = re.sub(r'โทร(?:ไป)?ก่อน(?:ส่ง)?(?:นะ(?:คะ|ครับ)?)?', ' ', text)
+        text = re.sub(r'โทร(?:ไป|หา)?ก่อน(?:ส่ง|ถึง)?(?:นะ(?:คะ|ครับ)?)?', ' ', text)
         # Strip phone labels WITH optional trailing colon/dash
         text = re.sub(
             r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร\.?|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
@@ -707,7 +707,7 @@ class SmartAddressParser:
         text = CONNECTOR_PATTERN.sub(" ", text)
         text = re.sub(r"\b(ด้วยนะ|หน่อยนะ|ด้วย)\b", " ", text)
         text = re.sub(r'[ก-๙A-Za-z_]+\s*[:\-]\s*', ' ', text)  # FIX-R1 orphan labels
-        text = re.sub(r'(?:ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
+        text = re.sub(r'(?:ขอบคุณมาก(?:ๆ)?(?:\s*พี่)|ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
         text = re.sub(r'(?:^|\s)(?:กท|มา|ด่วนๆ)(?=\s|$)', ' ', text)
         text = re.sub(r"\s+", " ", text).strip()
         while True:
