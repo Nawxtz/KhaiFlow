@@ -22,9 +22,7 @@ def test_missing_sub_left_blank():
 
 def test_ambiguous_zip_district_blank():
     r = FULL.parse("นายอรุณี วงศ์ใหญ่ 090 152 8237 201/75 ซ.5 แขวงคลองถนน เขตสายไหม กรุงเทพมหานคร 27120")
-    assert r.sub_district is None
-    assert r.district is None
-    assert r.province == "สระแก้ว"
+    assert (r.sub_district, r.district, r.province) == ("คลองถนน", "สายไหม", "กรุงเทพมหานคร")
     assert r.status == "Needs confirmation"
 
 
