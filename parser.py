@@ -399,6 +399,14 @@ class SmartAddressParser:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Input must be a non-empty string")
         text = unicodedata.normalize("NFC", text)
+        # Drop Unicode pictographs (So/Sk) and variation selectors
+        text = "".join(
+            " " if unicodedata.category(c) in ("So", "Sk")
+            else ("" if (0xFE00 <= ord(c) <= 0xFE0F or 0xE0100 <= ord(c) <= 0xE01EF) else c)
+            for c in text
+        )
+        if not text.strip():
+            raise ValueError("Input must be a non-empty string")
         # FIX [#18]: Normalize Thai digits ๐–๙ to ASCII 0–9.
         # Without this, zipcodes/phones written in Thai numerals (e.g. ๒๐๑๓๐)
         # are invisible to ZIPCODE_RE, PHONE_RE, and the digit-density
@@ -462,6 +470,11 @@ class SmartAddressParser:
         )
         text = re.sub(r'(?:เบอร์สำรอง|เบอร์หลัก|เบอร์รอง)', ' ', text)
         text = re.sub(r'(?:^|\s)(?:หลัก|สำรอง|รอง)(?=\s|$)', ' ', text)
+        # Strip brackets wrapping field labels: [ชื่อ]:, [เบอร์]:, [ที่อยู่]:
+        text = re.sub(
+            r'(?:^|(?<=\s))[(\[{<（【［｛](ผู้รับ|ชื่อผู้รับ|ชื่อลูกค้า|ลูกค้าชื่อ|ผู้รับคือ|ชื่อจริง|ชื่อเล่น|ชื่อ|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร|tel|ติดต่อ|เบอร์|ที่อยู่|ตำบล|อำเภอ|จังหวัด|ไปรษณีย์|รหัสไปรษณีย์)[)\]}>）】］｝]',
+            r'\1', text, flags=re.IGNORECASE
+        )
         # Strip phone labels WITH optional trailing colon/dash
         text = re.sub(
             r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
@@ -504,7 +517,12 @@ class SmartAddressParser:
                 raw = "0" + raw[3:]
             elif raw.startswith("66") and not raw.startswith("0"):
                 raw = "0" + raw[2:]
-            text = text[: m.start()] + " " + text[m.end():]
+            start = m.start()
+            end = m.end()
+            if start > 0 and text[start - 1] in "([{" and end < len(text) and text[end] in ")]}":
+                start -= 1
+                end += 1
+            text = text[: start] + " " + text[end:]
             while True:
                 found = False
                 for m2 in PHONE_RE.finditer(text):
@@ -512,15 +530,21 @@ class SmartAddressParser:
                         if m2.start() < 5 or text[m2.start() - 5 : m2.start()] not in self._valid_zips:
                             continue
                     start = m2.start()
+                    end = m2.end()
                     prefix = text[:start]
                     sep_m = re.search(r"\s*(?:/|,|หรือ)\s*$", prefix)
                     if sep_m:
                         start = sep_m.start()
-                    text = text[:start] + " " + text[m2.end():]
+                    elif start > 0 and text[start - 1] in "([{" and end < len(text) and text[end] in ")]}":
+                        start -= 1
+                        end += 1
+                    text = text[:start] + " " + text[end:]
                     found = True
                     break
                 if not found:
                     break
+            while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", text):
+                text = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", text)
             return raw, re.sub(r"\s+", " ", text).strip()
         return None, text
 
@@ -572,11 +596,14 @@ class SmartAddressParser:
         label_m = RECEIVER_LABEL_RE.search(text)
         if label_m:
             candidate = label_m.group(1).strip()
-            candidate = re.sub(r"[)\]}>\"\']+$", "", candidate).strip()
+            candidate = re.sub(r"^[(\[{<\"'/（）【】［］｛｝\s]+|[)\]}>\"'/（）【】［］｛｝\s]+$", "", candidate).strip()
             if len(candidate) >= 2:
                 receiver = candidate
                 # Remove the entire label+name span from text
-                text = text[:label_m.start()] + " " + text[label_m.end():]
+                end = label_m.end()
+                while end < len(text) and text[end] in ")]}>/（）【】［］｛｝ ":
+                    end += 1
+                text = text[:label_m.start()] + " " + text[end:]
                 text = re.sub(r"\s+", " ", text).strip()
 
         # [FIX-T8] Protect "เลขที่ N" from connector stripping — preserves house nums
@@ -597,6 +624,14 @@ class SmartAddressParser:
             if not gm or not gm.group(0).strip():
                 break
             text = text[gm.end():].strip()
+
+        # Strip brackets wrapping receiver at start of text
+        wrap_m = re.match(r"^\s*([(\[{<（【［｛])([ก-๙A-Za-z\s.]+?)([)\]}>）】］｝])", text)
+        if wrap_m:
+            candidate = wrap_m.group(2).strip()
+            if len(candidate) >= 2 and not self._is_name_stop(candidate):
+                rem = text[wrap_m.end():].strip()
+                text = f"{candidate} {rem}".strip()
 
         # Pass A: Honorific anchor — include honorific in returned receiver
         # e.g. "คุณจิรายุ" → receiver = "คุณจิรายุ" (not just "จิรายุ")
@@ -703,7 +738,7 @@ class SmartAddressParser:
         # FIX [P-F4]: Strip trailing bracket/quote punctuation and location connectors from receiver.
         if receiver:
             receiver = re.sub(r"\s+ที่\s*[ก-๙]+.*$", "", receiver).strip()
-            receiver = re.sub(r"[\s()\[\]{}<>\"\']+$", "", receiver).strip()
+            receiver = re.sub(r"^[\s()\[\]{}<>\"'/（）【】［］｛｝]+|[\s()\[\]{}<>\"'/（）【】［］｛｝]+$", "", receiver).strip()
             if len(receiver) < 2 or self._is_name_stop(receiver):
                 receiver = None
 
@@ -839,6 +874,28 @@ class SmartAddressParser:
         # Strip isolated stray vowels / tone marks at word boundaries or ends
         t = re.sub(r"(?:^|\s)[\u0E30-\u0E39\u0E47-\u0E4E]+(?=\s|$)", " ", t)
         t = re.sub(r"(?:^|\s)หมู่\s*$", " ", t)
+
+        # Remove empty or unpaired bracket leftovers
+        while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", t):
+            t = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", t)
+
+        _pairs = {"(": ")", "[": "]", "{": "}", "<": ">", "（": "）", "【": "】", "［": "］", "｛": "｝"}
+        _closers = {")": "(", "]": "[", "}": "{", ">": "<", "）": "（", "】": "【", "］": "［", "｝": "｛"}
+        _stack = []
+        _unpaired = set()
+        for idx, c in enumerate(t):
+            if c in _pairs:
+                _stack.append((c, idx))
+            elif c in _closers:
+                if _stack and _stack[-1][0] == _closers[c]:
+                    _stack.pop()
+                else:
+                    _unpaired.add(idx)
+        for _, idx in _stack:
+            _unpaired.add(idx)
+        if _unpaired:
+            t = "".join(c for idx, c in enumerate(t) if idx not in _unpaired)
+
         t = re.sub(r"\s+", " ", t).strip(" ,.-")
         if t in ("ช่วย", "ส่ง", "จัดส่ง", "รบกวน", "ฝาก", "ที่", "แถว", "ช่วยส่งให้", "ส่งให้", "ค่ะ", "ครับ", "นะคะ"):
             return None
