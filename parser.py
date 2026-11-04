@@ -1173,10 +1173,6 @@ class SmartAddressParser:
 # HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _best_name_candidate(text: str) -> Optional[str]:
-    tokens = [t for t in text.split() if re.search(r"[฀-๿]", t) and len(t) >= 2]
-    return " ".join(tokens[:2]) if tokens else (text.strip() or None)
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DATA FLYWHEEL — HITL CORRECTION LOGGER
@@ -1231,92 +1227,6 @@ def log_correction(
             else setattr(record, "_db_error", str(exc))
         logger.error("Failed to log correction: %s", exc, exc_info=True)
     return record
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# OMNICHANNEL INPUT NORMALISER  (REST / Meta Messenger / LINE)
-# ══════════════════════════════════════════════════════════════════════════════
-
-from models import ChannelMessage  # noqa: E402
-
-
-def normalise_webhook_payload(payload: dict) -> ChannelMessage:
-    """Detect source channel from payload structure and extract address text."""
-    # Meta Messenger
-    if payload.get("object") == "page" and "entry" in payload:
-        try:
-            entry     = payload["entry"][0]
-            messaging = entry["messaging"][0]
-            msg_obj   = messaging.get("message", {})
-            if "text" not in msg_obj:
-                raise ValueError(
-                    f"Meta Messenger message has no text field "
-                    f"(type='{msg_obj.get('type', 'unknown')}')"
-                )
-            return ChannelMessage(
-                text=msg_obj["text"].strip(),
-                channel="facebook",
-                customer_id=messaging.get("sender", {}).get("id"),
-                message_id=msg_obj.get("mid"),
-                page_id=entry.get("id"),
-                raw=payload,
-            )
-        except (KeyError, IndexError, TypeError) as exc:
-            raise ValueError(f"Malformed Meta Messenger payload: {exc}") from exc
-
-    # LINE — iterate ALL events in the batch, return the first text message.
-    # FIX [#21]: LINE delivers multiple events in one POST when a customer
-    # sends rapid messages. The old code hard-coded events[0], silently
-    # dropping every event after the first one in such batches.
-    if "events" in payload:
-        try:
-            events = payload["events"]
-            if not events:
-                raise ValueError("LINE webhook received empty events list")
-            for event in events:
-                if event.get("type") != "message":
-                    continue
-                msg_obj = event.get("message", {})
-                if msg_obj.get("type") != "text":
-                    continue
-                return ChannelMessage(
-                    text=msg_obj["text"].strip(),
-                    channel="line",
-                    customer_id=event.get("source", {}).get("userId"),
-                    raw=payload,
-                )
-            # No usable text event found anywhere in the batch
-            first_type = events[0].get("type", "unknown")
-            raise ValueError(
-                f"LINE webhook contained no text message events "
-                f"(first event type='{first_type}')"
-            )
-        except ValueError:
-            raise
-        except (KeyError, TypeError) as exc:
-            raise ValueError(f"Malformed LINE payload: {exc}") from exc
-
-    # REST (standard)
-    text = payload.get("text") or payload.get("message") or payload.get("address") or ""
-    if text:
-        return ChannelMessage(
-            text=str(text).strip(),
-            channel="rest",
-            customer_id=payload.get("customer_id") or payload.get("user_id"),
-            raw=payload,
-        )
-    raise ValueError(
-        "Cannot extract text. Expected 'text', Meta Messenger entry, or LINE event."
-    )
-
-
-def parse_from_webhook(
-    payload: dict,
-    parser: SmartAddressParser,
-) -> Tuple[ParseResult, ChannelMessage]:
-    """Convenience wrapper: normalise any webhook payload -> parse."""
-    msg = normalise_webhook_payload(payload)
-    return parser.parse(msg.text), msg
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -13,7 +13,6 @@ NEW FIXES applied (this version):
 """
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -106,9 +105,6 @@ class ParseResult:
             "warnings":       list(self.warnings),
         }
 
-    def to_json(self, indent: int = 2) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=False, indent=indent)
-
 
 @dataclass
 class NERResult:
@@ -133,14 +129,3 @@ class CorrectionRecord:
     session_id:       Optional[str] = None
     request_id:       Optional[str] = None
     model_version:    str           = "v7.0"
-
-
-@dataclass
-class ChannelMessage:
-    """Normalised message extracted from any supported inbound channel."""
-    text:        str
-    channel:     str
-    customer_id: Optional[str]       = None
-    message_id:  Optional[str]       = None
-    page_id:     Optional[str]       = None
-    raw:         Optional[Dict[str, Any]] = None

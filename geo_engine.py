@@ -133,13 +133,6 @@ class GeoDatabase:
     def load_csv_string(self, csv_text: str) -> "GeoDatabase":
         return self._load_reader(csv.DictReader(StringIO(csv_text)))
 
-    def load_records(self, records: List[dict]) -> "GeoDatabase":
-        for r in records:
-            self._ingest(r)
-        self._loaded = True
-        logger.info("GeoDatabase loaded: %d records", len(self._all_records))
-        return self
-
     def _load_reader(self, reader: csv.DictReader) -> "GeoDatabase":
         missing = self.REQUIRED_COLS - set(reader.fieldnames or [])
         if missing:
@@ -500,9 +493,6 @@ class GeoDatabase:
         return False
 
     # ── Accessors ─────────────────────────────────────────────────────────────
-
-    def provinces_for_zipcode(self, zipcode: str) -> Set[str]:
-        return {r.province for r in self._zip_map.get(zipcode, [])}
 
     @property
     def size(self) -> int:
