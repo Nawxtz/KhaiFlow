@@ -362,10 +362,15 @@ class SmartAddressParser:
                 result.district = geo_rec.district
 
             result.province = geo_rec.province
-            if (result.sub_district or result.district) and not result.zipcode:
+            if result.sub_district and not result.zipcode:
                 result.zipcode = geo_rec.zipcode
                 if not (geo_score == 9 and not geo_warns and result.sub_district and result.district and result.province):
                     result.warnings.append(f"[AutoFill] Zipcode '{geo_rec.zipcode}' auto-filled from database")
+            elif result.district and not result.zipcode:
+                dist_zips = {r.zipcode for r in self._geo.records_for_district(result.district) if not result.province or r.province == result.province}
+                if len(dist_zips) == 1:
+                    result.zipcode = next(iter(dist_zips))
+                    result.warnings.append(f"[AutoFill] Zipcode '{result.zipcode}' auto-filled from database")
             text = self._strip_geo_tokens(text, geo_rec)
 
         # Zipcode-driven Auto-Fill: Infer missing province, district, and sub-district from Zipcode
@@ -993,7 +998,11 @@ class SmartAddressParser:
     # normalised by the time this method is called from parse().
     def _apply_fuzzy_geo(self, normalised_text: str, result: ParseResult) -> ParseResult:
         fuzzy_rec, _, corrections, fuzzy_warns = self._fuzzy.fuzzy_lookup(
-            normalised_text, zipcode_hint=result.zipcode, threshold=self._fuzzy_threshold
+            normalised_text,
+            zipcode_hint=result.zipcode,
+            threshold=self._fuzzy_threshold,
+            district_hint=result.district,
+            province_hint=result.province,
         )
         result.warnings.extend(fuzzy_warns)
 
@@ -1012,6 +1021,7 @@ class SmartAddressParser:
             result.province     = result.province     or fuzzy_rec.province
             if not result.zipcode and (sub_corrected or dist_corrected):
                 result.zipcode  = fuzzy_rec.zipcode
+                result.warnings.append(f"[AutoFill] Zipcode '{fuzzy_rec.zipcode}' auto-filled from database")
             for c in corrections:
                 result.warnings.append(f"[FuzzyCorrection] {c}")
 
@@ -1039,7 +1049,11 @@ class SmartAddressParser:
                 result.warnings.append(f"[NERFallback] Geo from: '{ner.location_hint}'")
             elif RAPIDFUZZ_AVAILABLE:
                 fuzzy_rec, _, corrections, _ = self._fuzzy.fuzzy_lookup(
-                    ner.location_hint, zipcode_hint=result.zipcode
+                    ner.location_hint,
+                    zipcode_hint=result.zipcode,
+                    threshold=self._fuzzy_threshold,
+                    district_hint=result.district,
+                    province_hint=result.province,
                 )
                 if fuzzy_rec:
                     result.province = result.province or fuzzy_rec.province

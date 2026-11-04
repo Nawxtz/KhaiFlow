@@ -564,6 +564,8 @@ class FuzzyGeoMatcher:
         text: str,
         zipcode_hint: Optional[str] = None,
         threshold: int = FUZZY_THRESHOLD,
+        district_hint: Optional[str] = None,
+        province_hint: Optional[str] = None,
     ) -> Tuple[Optional[GeoRecord], int, List[str], List[str]]:
         """
         Attempt fuzzy geo match after exact lookup fails.
@@ -575,7 +577,7 @@ class FuzzyGeoMatcher:
         warnings_out: List[str] = []
         corrections:  List[str] = []
 
-        # Narrow candidate lists by zipcode when available
+        # Narrow candidate lists by zipcode or exact district+province when available
         # FIX [FIX-G3]: use public records_for_zipcode() accessor
         if zipcode_hint:
             zip_recs = self._geo.records_for_zipcode(zipcode_hint)
@@ -583,6 +585,16 @@ class FuzzyGeoMatcher:
                 cand_subs  = list({r.sub_district for r in zip_recs})
                 cand_dists = list({r.district     for r in zip_recs})
                 cand_provs = list({r.province     for r in zip_recs})
+                use_buckets = False
+            else:
+                cand_subs = cand_dists = cand_provs = []
+                use_buckets = True
+        elif district_hint and province_hint:
+            dist_recs = [r for r in self._geo.records_for_district(district_hint) if r.province == province_hint]
+            if dist_recs:
+                cand_subs  = list({r.sub_district for r in dist_recs})
+                cand_dists = [district_hint]
+                cand_provs = [province_hint]
                 use_buckets = False
             else:
                 cand_subs = cand_dists = cand_provs = []
@@ -632,6 +644,12 @@ class FuzzyGeoMatcher:
             if exact_rec.province:
                 used_dist_prov.add(exact_rec.province)
 
+        if not cand_subs and exact_rec and exact_rec.district in text and exact_rec.province in text:
+            dist_recs = [r for r in self._geo.records_for_district(exact_rec.district) if r.province == exact_rec.province]
+            if dist_recs:
+                cand_subs = list({r.sub_district for r in dist_recs})
+                use_buckets = False
+
         _GEO_PREFIX_STRIP = [
             ("ตำบล", "sub"), ("อำเภอ", "dist"), ("จังหวัด", "prov"),
             ("แขวง", "sub"), ("เขต", "dist"),
@@ -656,7 +674,10 @@ class FuzzyGeoMatcher:
             if stripped in receiver_tokens or len(stripped) < 2:
                 continue
 
-            subs  = cand_subs  if not use_buckets else self._near_len(stripped, self._sub_by_len)
+            if (stripped in used_dist_prov or token in used_dist_prov) and pfx_type != "sub":
+                continue
+
+            subs  = cand_subs  if cand_subs else (cand_subs if not use_buckets else self._near_len(stripped, self._sub_by_len))
             dists = cand_dists if not use_buckets else self._near_len(stripped, self._dist_by_len)
             provs = cand_provs if not use_buckets else self._near_len(stripped, self._prov_by_len)
 
@@ -685,7 +706,11 @@ class FuzzyGeoMatcher:
                 match, score = correct_typo(stripped, cands, threshold)
                 if match and score > tok_best_score:
                     recs = accessor(match)
-                    if zipcode_hint:
+                    target_d = district_hint or (exact_rec.district if exact_rec else None)
+                    target_p = province_hint or (exact_rec.province if exact_rec else None)
+                    if target_d or target_p:
+                        recs = [r for r in recs if (not target_d or r.district == target_d) and (not target_p or r.province == target_p)] or recs
+                    elif zipcode_hint:
                         recs = [r for r in recs if r.zipcode == zipcode_hint] or recs
                     if recs:
                         tok_best_rec   = recs[0]
