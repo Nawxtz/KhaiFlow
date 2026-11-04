@@ -705,7 +705,7 @@ class SmartAddressParser:
         text = CONNECTOR_PATTERN.sub(" ", text)
         text = re.sub(r"\b(ด้วยนะ|หน่อยนะ|ด้วย)\b", " ", text)
         text = re.sub(r'[ก-๙A-Za-z_]+\s*[:\-]\s*', ' ', text)  # FIX-R1 orphan labels
-        text = re.sub(r'(?:ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
+        text = re.sub(r'(?:ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
         text = re.sub(r'(?:^|\s)(?:กท|มา|ด่วนๆ)(?=\s|$)', ' ', text)
         text = re.sub(r"\s+", " ", text).strip()
         while True:
