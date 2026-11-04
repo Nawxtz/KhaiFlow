@@ -566,7 +566,7 @@ class SmartAddressParser:
         )
         # Strip phone labels WITH optional trailing colon/dash
         text = re.sub(
-            r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
+            r'(?i)(?:รหัสไปรษณีย์|เบอร์โทรศัพท์|เบอร์โทร|โทรศัพท์|โทร\.?|tel\.|tel|ติดต่อ|เบอร์)\s*[:\-]?\s*',
             ' ', text
         )
         text = re.sub(r'([฀-๿])(\d)', r'\1 \2', text)
