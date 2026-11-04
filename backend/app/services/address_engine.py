@@ -97,10 +97,7 @@ def get_parser() -> Any:
         from geo_engine import GeoDatabase
         from parser import SmartAddressParser
 
-        csv_path = next(
-            (d / "data" / "thai_address_full.csv" for d in candidates if (d / "data" / "thai_address_full.csv").exists()),
-            None,
-        )
+        csv_path = _find_csv_path()
         geo = GeoDatabase()
         if csv_path:
             geo.load_csv(str(csv_path))
@@ -125,19 +122,24 @@ def _load_zipcode_cache(geo_db: Any) -> None:
                 _ZIPCODE_TO_PROVINCES.setdefault(zipcode, set()).add(province)
 
 
+def _find_csv_path() -> Path | None:
+    """Locate the canonical address CSV under the backend or repo root."""
+    candidates = [
+        Path(__file__).resolve().parent.parent.parent,
+        Path(__file__).resolve().parent.parent.parent.parent,
+    ]
+    return next(
+        (d / "data" / "thai_address_full.csv" for d in candidates if (d / "data" / "thai_address_full.csv").exists()),
+        None,
+    )
+
+
 def _ensure_zipcode_cache() -> None:
     """Ensure zipcode to province lookup table is populated from canonical CSV."""
     global _ZIPCODE_TO_PROVINCES
     if _ZIPCODE_TO_PROVINCES:
         return
-    candidates = [
-        Path(__file__).resolve().parent.parent.parent,
-        Path(__file__).resolve().parent.parent.parent.parent,
-    ]
-    csv_path = next(
-        (d / "data" / "thai_address_full.csv" for d in candidates if (d / "data" / "thai_address_full.csv").exists()),
-        None,
-    )
+    csv_path = _find_csv_path()
     if csv_path:
         import csv
 
