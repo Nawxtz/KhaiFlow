@@ -669,6 +669,8 @@ class SmartAddressParser:
         # Strip invisible / zero-width Unicode chars
         text = re.sub(r"[\u200b\u200c\u200d\u200e\u200f\ufeff\u00a0]", " ", text)
         text = re.sub(r"[\n\r\t]+", " ", text)
+        # "(081)2345678" / "(02)1234567": drop the parentheses around a phone prefix
+        text = re.sub(r"\((0\d{1,2})\)\s*(?=\d)", r"\1", text)
         def _replace_o_zipcode(m: re.Match) -> str:
             tok = m.group(1)
             if sum(1 for c in tok if c.isdigit()) >= 3 and any(c in "Oo" for c in tok):
@@ -939,7 +941,12 @@ class SmartAddressParser:
         # If receiver was set by Pass -1 (label), still strip pre-address preamble
         if receiver is not None:
             _pre = ADDRESS_DETAIL_RE.search(text)
-            if _pre and _pre.start() > 0:
+            if _pre and _pre.start() > 0 and not (
+                text.startswith(" ")
+                and " " in receiver
+                and not re.search(r"[A-Za-z]", receiver)
+                and re.fullmatch(r"[A-Za-z]+(?:\s+[A-Za-z]+)*", text[: _pre.start()].strip())
+            ):
                 text = text[_pre.start():].strip()
         # Pass B: house-number anchor
         if receiver is None:
