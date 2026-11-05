@@ -415,7 +415,7 @@ class SmartAddressParser:
                             result.sub_district = match
                             result.district = recs[0].district
                             result.warnings.append(f"[FuzzyCorrection] ตำบล: '{m.group(1)}' → '{match}' ({score}%)")
-                            text = re.sub(r"\s+", " ", re.sub(r"(?:ตำบล|แขวง)?\s*" + re.escape(m.group(1)), " ", text)).strip()
+                            text = re.sub(r"\s+", " ", re.sub(r"(?:ตำบล|แขวง)\s*" + re.escape(m.group(1)), " ", text)).strip()
 
         result.tags, text = self._extract_tags(text)
         result.receiver, result.address_detail = self._extract_receiver_and_address(text)
@@ -532,6 +532,8 @@ class SmartAddressParser:
         # Inject spaces between Thai chars and digits (no-space input like "เอกราช0894561234บ้านเลขที่9")
         text = re.sub(r'([\u0E00-\u0E7F])(\d)', r'\1 \2', text)
         text = re.sub(r'(\d)([\u0E00-\u0E7F])', r'\1 \2', text)
+        # "เขตคลองเตยกทม.10110" / "…กรุงเทพฯ10110": split glued Bangkok short names
+        text = re.sub(r"([\u0E00-\u0E7F])(กทม\.|กรุงเทพฯ)", r"\1 \2", text)
         # Inject space before geo abbreviation prefixes glued to previous Thai word
         # "บางโฉลงอ.บางพลีจ.สมุทรปราการ" → "บางโฉลง อ.บางพลี จ.สมุทรปราการ"
         text = re.sub(r'([\u0E00-\u0E7F])(?<!กท)(?<!(?<![\u0E00-\u0E7F])อบ)(?<!\.ส)(?!(?<=(?<![\u0E00-\u0E7F])อส)ม\.)(ม\.|[ตอจซถ]\.)', r'\1 \2', text)
@@ -681,12 +683,21 @@ class SmartAddressParser:
                 continue
             text = bare_pat.sub(" ", text)
         text = re.sub(ZIPCODE_RE, " ", text)
+        _zc = getattr(rec, "zipcode", None)
+        if _zc and len(_zc) == 5 and _zc.isdigit():
+            text = re.sub(r"(?<!\d)" + r"[ \-]?".join(_zc) + r"(?!\d)", " ", text)
         # FIX [P-F2]: Remove orphaned geo-prefix stubs left when district name
         # was split across tokens (e.g. "เมือง เชียงใหม่" → "เมือง" stub after
         # "เมืองเชียงใหม่" is stripped as a unit).  Only strip when surrounded
         # by whitespace/boundary to avoid clipping legitimate place-name parts.
         if getattr(rec, "district", None) and rec.district.startswith("เมือง"):
             text = re.sub(r"(?<!\S)อำเภอ\s*เมือง(?!\S)", " ", text)
+        def _abbr_of(m, name):
+            s = m.group(2).rstrip("ฯ.").replace("์", "")
+            it = iter(name or "")
+            return " " if len(s) >= 2 and all(ch in it for ch in s) else m.group(0)
+        text = re.sub(r"(?<!\S)(จังหวัด)(\S+)", lambda m: _abbr_of(m, getattr(rec, "province", None)), text)
+        text = re.sub(r"(?<!\S)(อำเภอ)(\S+)", lambda m: _abbr_of(m, getattr(rec, "district", None)), text)
         text = re.sub(r"(?<!\S)(?:เมือง|อำเภอ|เขต|จังหวัด|ตำบล|แขวง)(?!\S)", " ", text)
         return re.sub(r"\s+", " ", text).strip()
 
