@@ -62,7 +62,6 @@ import re
 from typing import Dict, FrozenSet, List, Tuple
 
 THAI_BLOCK = r"[฀-๿]"
-THAI_CHAR_RE = re.compile(THAI_BLOCK)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ABBREVIATION EXPANSION
@@ -210,16 +209,6 @@ _GREETING_LEAD_PARTS: List[str] = [
 ]
 GREETING_LEAD_PATTERN = re.compile(
     r"^(?:" + "|".join(_GREETING_LEAD_PARTS) + r")\s*",
-    re.IGNORECASE,
-)
-
-_PHONE_LABELS: List[str] = [
-    "เบอร์โทรศัพท์", "เบอร์โทร", "โทรศัพท์", "โทร", "tel.", "tel", "ติดต่อ", "เบอร์",
-    # [FIX-PL1] Strip "รหัสไปรษณีย์" label so the 5-digit code after it is captured cleanly
-    "รหัสไปรษณีย์",
-]
-PHONE_LABEL_PATTERN = re.compile(
-    "|".join(re.escape(lb) for lb in sorted(_PHONE_LABELS, key=len, reverse=True)),
     re.IGNORECASE,
 )
 
