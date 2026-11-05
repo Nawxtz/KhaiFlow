@@ -1160,8 +1160,13 @@ class SmartAddressParser:
         if _unpaired:
             t = "".join(c for idx, c in enumerate(t) if idx not in _unpaired)
 
-        t = re.sub(r"([,/])(?:\s*[,/])+", r"\1", t)
-        t = re.sub(r"\s+", " ", t).strip(" ,.-/")
+        t = re.sub(r"(?<!\S)[,;/\"'“”‘’]+(?!\S)|[,;]+(?!\S)", " ", t)
+        t = re.sub(r"\s+", " ", t).strip(" ,.-/;")
+        if len(t) >= 2 and t[0] == t[-1] and t[0] in ('"', "'"):
+            t = t[1:-1].strip(" ,.-/;")
+        for _q in ('"', "'"):
+            if t.count(_q) % 2 == 1:
+                t = t.strip(f" ,.-/;{_q}")
         if t in ("ช่วย", "ส่ง", "จัดส่ง", "รบกวน", "ฝาก", "ที่", "แถว", "ช่วยส่งให้", "ส่งให้", "ค่ะ", "ครับ", "นะคะ"):
             return None
         if len(t) < 2 and not t.isdigit():
