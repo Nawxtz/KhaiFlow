@@ -433,7 +433,6 @@ INTENT_NEG_KEYWORDS: FrozenSet[str] = frozenset([
     # NOTE: "นะคะ", "คะ", "ครับ", "นะครับ" intentionally REMOVED [FIX-C8]
 ])
 
-INTENT_DIGIT_THRESHOLD: float = 0.04
 
 # ══════════════════════════════════════════════════════════════════════════════
 # FUZZY MATCHING THRESHOLDS

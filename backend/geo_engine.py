@@ -256,103 +256,66 @@ class GeoDatabase:
                     return True
             return False
 
+        def _find_matches(name: str, pfxs: tuple, follow: tuple = ()) -> List[Tuple[int, int, bool, int]]:
+            if not name:
+                return []
+            m = []
+            for pfx in pfxs:
+                full = pfx + name
+                flen = len(full)
+                idx = text.find(full)
+                while idx != -1:
+                    end_idx = idx + flen
+                    before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                    if before_ok and check_after(end_idx, follow):
+                        m.append((idx, end_idx, True, len(name)))
+                    idx = text.find(full, idx + 1)
+            tlen = len(name)
+            idx = text.find(name)
+            while idx != -1:
+                end_idx = idx + tlen
+                before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
+                if before_ok and (pfxs is not _SUB_PFXS or not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ."))) and check_after(end_idx, follow):
+                    if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                        m.append((idx, end_idx, False, tlen))
+                idx = text.find(name, idx + 1)
+            return m
+
         def get_sub_matches(sub: str) -> List[Tuple[int, int, bool, int]]:
             if sub not in sub_cache:
-                m = []
-                if sub:
-                    for pfx in _SUB_PFXS:
-                        full = pfx + sub
-                        flen = len(full)
-                        idx = text.find(full)
-                        while idx != -1:
-                            end_idx = idx + flen
-                            before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                            if before_ok and check_after(end_idx, _DIST_PFXS + prov_prefixes):
-                                m.append((idx, end_idx, True, len(sub)))
-                            idx = text.find(full, idx + 1)
-                    tlen = len(sub)
-                    idx = text.find(sub)
-                    while idx != -1:
-                        end_idx = idx + tlen
-                        before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                        if before_ok and not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ.")) and check_after(end_idx, _DIST_PFXS + prov_prefixes):
-                            if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
-                                m.append((idx, end_idx, False, tlen))
-                        idx = text.find(sub, idx + 1)
-                sub_cache[sub] = m
+                sub_cache[sub] = _find_matches(sub, _SUB_PFXS, _DIST_PFXS + prov_prefixes)
             return sub_cache[sub]
 
         def get_dist_matches(dist: str, prov: str) -> List[Tuple[int, int, bool, int]]:
             key = (dist, prov)
             if key not in dist_cache:
-                m = []
-                if dist:
-                    for pfx in _DIST_PFXS:
-                        full = pfx + dist
-                        flen = len(full)
-                        idx = text.find(full)
+                m = _find_matches(dist, _DIST_PFXS, prov_prefixes)
+                if dist.startswith("เมือง"):
+                    prov_in_text = prov and (prov in text or any(pfx + prov in text for pfx in _PROV_PFXS))
+                    if prov_in_text:
+                        for muang_pfx in ("อำเภอเมือง", "อ.เมือง"):
+                            flen = len(muang_pfx)
+                            idx = text.find(muang_pfx)
+                            while idx != -1:
+                                end_idx = idx + flen
+                                if check_after(end_idx, prov_prefixes):
+                                    if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                        m.append((idx, end_idx, True, len(dist)))
+                                idx = text.find(muang_pfx, idx + 1)
+                        idx = text.find("เมือง")
                         while idx != -1:
-                            end_idx = idx + flen
+                            end_idx = idx + len("เมือง")
                             before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
                             if before_ok and check_after(end_idx, prov_prefixes):
-                                m.append((idx, end_idx, True, len(dist)))
-                            idx = text.find(full, idx + 1)
-                    tlen = len(dist)
-                    idx = text.find(dist)
-                    while idx != -1:
-                        end_idx = idx + tlen
-                        before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                        if before_ok and check_after(end_idx, prov_prefixes):
-                            if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
-                                m.append((idx, end_idx, False, tlen))
-                        idx = text.find(dist, idx + 1)
-                    if dist.startswith("เมือง"):
-                        prov_in_text = prov and (prov in text or any(pfx + prov in text for pfx in _PROV_PFXS))
-                        if prov_in_text:
-                            for muang_pfx in ("อำเภอเมือง", "อ.เมือง"):
-                                flen = len(muang_pfx)
-                                idx = text.find(muang_pfx)
-                                while idx != -1:
-                                    end_idx = idx + flen
-                                    if check_after(end_idx, prov_prefixes):
-                                        if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
-                                            m.append((idx, end_idx, True, len(dist)))
-                                    idx = text.find(muang_pfx, idx + 1)
-                            idx = text.find("เมือง")
-                            while idx != -1:
-                                end_idx = idx + len("เมือง")
-                                before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                                if before_ok and check_after(end_idx, prov_prefixes):
-                                    if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
-                                        m.append((idx, end_idx, False, len(dist)))
-                                idx = text.find("เมือง", idx + 1)
+                                if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
+                                    m.append((idx, end_idx, False, len(dist)))
+                            idx = text.find("เมือง", idx + 1)
                 dist_cache[key] = m
             return dist_cache[key]
 
         def get_prov_matches(prov: str) -> List[Tuple[int, int, bool, int]]:
             if prov not in prov_cache:
-                m = []
-                if prov:
-                    for pfx in _PROV_PFXS:
-                        full = pfx + prov
-                        flen = len(full)
-                        idx = text.find(full)
-                        while idx != -1:
-                            end_idx = idx + flen
-                            before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                            if before_ok and check_after(end_idx):
-                                m.append((idx, end_idx, True, len(prov)))
-                            idx = text.find(full, idx + 1)
-                    tlen = len(prov)
-                    idx = text.find(prov)
-                    while idx != -1:
-                        end_idx = idx + tlen
-                        before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                        if before_ok and check_after(end_idx):
-                            if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
-                                m.append((idx, end_idx, False, tlen))
-                        idx = text.find(prov, idx + 1)
-                prov_cache[prov] = m
+                prov_cache[prov] = _find_matches(prov, _PROV_PFXS, ())
             return prov_cache[prov]
 
         if zipcode_hint and zipcode_hint in self._zip_map and not any(

@@ -244,6 +244,21 @@ _DETAIL_NOISE_RES: List[re.Pattern] = [
 ]
 
 
+def _strip_empty_brackets(t: str) -> str:
+    while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", t):
+        t = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", t)
+    return t
+
+
+def _strip_greeting_lead(t: str) -> str:
+    while True:
+        gm = GREETING_LEAD_PATTERN.match(t)
+        if not gm or not gm.group(0).strip():
+            break
+        t = t[gm.end():].strip()
+    return t
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SMART ADDRESS PARSER
 # ══════════════════════════════════════════════════════════════════════════════
@@ -282,7 +297,6 @@ class SmartAddressParser:
         self._valid_zips      = geo_db.valid_zipcodes
         self._fuzzy           = FuzzyGeoMatcher(geo_db)
         self._fuzzy_threshold = fuzzy_threshold
-        self._ner_threshold   = ner_threshold
         logger.info(
             "SmartAddressParser ready — geo=%d NER=%s Fuzzy=%s",
             geo_db.size, PYTHAINLP_AVAILABLE, RAPIDFUZZ_AVAILABLE,
@@ -330,8 +344,6 @@ class SmartAddressParser:
 
         # Phase A: Rule-Based Core (receives pre-normalised text)
         result = self._rule_based_parse(normalised, t0)
-        if result.status == "Error":
-            return result
 
         if is_multi:
             result.warnings.append("[MultiAddress] Multiple addresses detected in one message")
@@ -748,8 +760,7 @@ class SmartAddressParser:
                 start -= 1
                 end += 1
             text = text[:start] + " " + text[end:]
-        while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", text):
-            text = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", text)
+        text = _strip_empty_brackets(text)
         return raw, re.sub(r"\s+", " ", text).strip()
 
     def _extract_zipcode(self, text: str) -> Tuple[Optional[str], str]:
@@ -825,11 +836,7 @@ class SmartAddressParser:
 
         # [FIX-T8] Protect "เลขที่ N" from connector stripping — preserves house nums
         text = re.sub(r'เลขที่\s*(\d)', r'\1', text)
-        while True:
-            gm = GREETING_LEAD_PATTERN.match(text)
-            if not gm or not gm.group(0).strip():
-                break
-            text = text[gm.end():].strip()
+        text = _strip_greeting_lead(text)
         text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?\s*เลย(?:\s*(?:นะคะ|นะค่ะ|นะ|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
         text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?(?:\s*(?:นะคะ|นะค่ะ|นะครับ|นะ|ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
         text = CONNECTOR_PATTERN.sub(" ", text)
@@ -838,11 +845,7 @@ class SmartAddressParser:
         text = re.sub(r'(?:ขอบคุณมาก(?:ๆ)?(?:\s*พี่)|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?\s*(?:คุณ)?พี่|ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
         text = re.sub(r'(?:^|\s)(?:กท|มา|ด่วนๆ)(?=\s|$)', ' ', text)
         text = re.sub(r"\s+", " ", text).strip()
-        while True:
-            gm = GREETING_LEAD_PATTERN.match(text)
-            if not gm or not gm.group(0).strip():
-                break
-            text = text[gm.end():].strip()
+        text = _strip_greeting_lead(text)
 
         # Strip brackets wrapping receiver at start of text
         wrap_m = re.match(r"^\s*([(\[{<（【［｛])([ก-๙A-Za-z\s.]+?)([)\]}>）】］｝])", text)
@@ -910,11 +913,7 @@ class SmartAddressParser:
                 before = text[: am.start()].strip()
                 if before:
                     clean_name = re.sub(r"(?i)(tel|โทร|เบอร์โทร)\s*$", "", before).strip()
-                    while True:
-                        gm = GREETING_LEAD_PATTERN.match(clean_name)
-                        if not gm or not gm.group(0).strip():
-                            break
-                        clean_name = clean_name[gm.end():].strip()
+                    clean_name = _strip_greeting_lead(clean_name)
                     trimmed: List[str] = []
                     started = False
                     for tok in clean_name.split():
@@ -1019,8 +1018,7 @@ class SmartAddressParser:
         t = re.sub(r"(?:^|\s)หมู่\s*$", " ", t)
 
         # Remove empty or unpaired bracket leftovers
-        while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", t):
-            t = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", t)
+        t = _strip_empty_brackets(t)
 
         _pairs = {"(": ")", "[": "]", "{": "}", "<": ">", "（": "）", "【": "】", "［": "］", "｛": "｝"}
         _closers = {")": "(", "]": "[", "}": "{", ">": "<", "）": "（", "】": "【", "］": "［", "｝": "｛"}
