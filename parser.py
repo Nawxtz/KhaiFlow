@@ -534,9 +534,9 @@ class SmartAddressParser:
         text = re.sub(r'(\d)([\u0E00-\u0E7F])', r'\1 \2', text)
         # Inject space before geo abbreviation prefixes glued to previous Thai word
         # "บางโฉลงอ.บางพลีจ.สมุทรปราการ" → "บางโฉลง อ.บางพลี จ.สมุทรปราการ"
-        text = re.sub(r'([\u0E00-\u0E7F])(?<!กท)(?<!อบ)(?<!\.ส)(ม\.|[ตอจซถ]\.)', r'\1 \2', text)
+        text = re.sub(r'([\u0E00-\u0E7F])(?<!กท)(?<!(?<![\u0E00-\u0E7F])อบ)(?<!\.ส)(?!(?<=(?<![\u0E00-\u0E7F])อส)ม\.)(ม\.|[ตอจซถ]\.)', r'\1 \2', text)
         # "จ.ชม." (Chiang Mai): undo the split of its trailing "ม."
-        text = re.sub(r'(จ\.ช) (ม\.)', r'\1\2', text)
+        text = re.sub(r'(จ\.[ชน]) (ม\.)', r'\1\2', text)
         # Normalise decomposed Thai sara-am (ํา → ำ) from some keyboards/copy-paste
         # U+0E4D U+0E32  → U+0E33  (affects ตำ อำ จำ etc.)
         text = text.replace('\u0e4d\u0e32', '\u0e33')

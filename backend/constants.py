@@ -89,8 +89,15 @@ ABBREV_EXPAND: List[Tuple[str, str]] = [
     # double-firing inside "กรุงเทพฯ" or "กรุงเทพมหานคร" because _NLA already
     # requires the next character NOT be Thai/Latin — ฯ and ม both are.
     (rf"{_NLB}กรุงเทพ{_NLA}",     "กรุงเทพมหานคร"),
-    (rf"{_NLB}โคราช{_NLA}",       "นครราชสีมา"),
+    (rf"{_NLB}(?<!ต\.)(?<!ตำบล)(?<!ตำบล )โคราช{_NLA}",       "นครราชสีมา"),
     (rf"{_NLB}จ\.\s*ชม\.?{_NLA}", "จังหวัดเชียงใหม่"),
+    (rf"{_NLB}จ\.\s*ขก\.?{_NLA}", "จังหวัดขอนแก่น"),
+    (rf"{_NLB}จ\.\s*สข\.?{_NLA}", "จังหวัดสงขลา"),
+    (rf"{_NLB}จ\.\s*นศ\.?{_NLA}", "จังหวัดนครศรีธรรมราช"),
+    (rf"{_NLB}จ\.\s*นม\.?{_NLA}", "จังหวัดนครราชสีมา"),
+    (rf"{_NLB}จ\.\s*ภก\.?{_NLA}", "จังหวัดภูเก็ต"),
+    (rf"{_NLB}จ\.\s*อบ\.?{_NLA}", "จังหวัดอุบลราชธานี"),
+    (rf"{_NLB}นครศรีฯ", "นครศรีธรรมราช"),
     (rf"{_NLB}แปดริ้ว{_NLA}",     "ฉะเชิงเทรา"),
 
     # 3. Geo-prefix abbreviations (after rank expansion to avoid collisions)
