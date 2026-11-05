@@ -67,6 +67,7 @@ class ParsedAddress:
 # Global parser instance & geo lookup cache
 _PARSER_INSTANCE: Any = None
 _ZIPCODE_TO_PROVINCES: dict[str, set[str]] = {}
+PARSER_DEGRADED: bool = False
 
 
 def set_parser(parser: Any) -> None:
@@ -80,7 +81,7 @@ def get_parser() -> Any:
     Retrieve or lazily initialize the local ThaiSmartAddress parser.
     Runs 100% locally with zero external network or LLM calls.
     """
-    global _PARSER_INSTANCE
+    global _PARSER_INSTANCE, PARSER_DEGRADED
     if _PARSER_INSTANCE is not None:
         return _PARSER_INSTANCE
 
@@ -105,7 +106,8 @@ def get_parser() -> Any:
         _PARSER_INSTANCE = SmartAddressParser(geo)
         logger.info("ThaiSmartAddress local parser initialized successfully from %s", csv_path)
     except Exception as exc:
-        logger.warning("Failed to load root parser, using fallback: %s", exc)
+        logger.error("Failed to load root parser, using fallback: %s", exc)
+        PARSER_DEGRADED = True
         _PARSER_INSTANCE = _FallbackAddressParser()
 
     return _PARSER_INSTANCE
@@ -456,11 +458,16 @@ def process_address_input(
 
         # Specific extraction/validation for field types
         if field_name == "phone":
-            phone_match = re.search(r"\b(0[689]\d{8})\b", clean_text)
-            field_val = phone_match.group(1) if phone_match else clean_text
+            phone_clean = clean_text.replace(" ", "").replace("-", "")
+            phone_match = re.search(r"(?<!\d)(0[689]\d{8}|0[2-57]\d{7})(?!\d)", phone_clean)
+            if not phone_match:
+                return [{"type": "text", "text": get_text(f"enter_missing_{field_name}", lang)}]
+            field_val = phone_match.group(1)
         elif field_name == "postcode":
-            zip_match = re.search(r"\b(\d{5})\b", clean_text)
-            field_val = zip_match.group(1) if zip_match else clean_text
+            zip_match = re.search(r"(?<!\d)(\d{5})(?!\d)", clean_text)
+            if not zip_match:
+                return [{"type": "text", "text": get_text(f"enter_missing_{field_name}", lang)}]
+            field_val = zip_match.group(1)
         else:
             field_val = clean_text
 
