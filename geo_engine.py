@@ -741,6 +741,8 @@ class FuzzyGeoMatcher:
 
             for cands, accessor, weight, label_prefix in cands_to_check:
                 match, score = correct_typo(stripped, cands, threshold)
+                if label_prefix == "ตำบล" and match != stripped and sum(1 for c in cands if stripped in c) > 1:
+                    match = None
                 if match and score > tok_best_score:
                     recs = accessor(match)
                     target_d = district_hint or (exact_rec.district if exact_rec else None)
