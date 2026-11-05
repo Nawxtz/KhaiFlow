@@ -524,27 +524,32 @@ class SmartAddressParser:
 
         if result.district:
             text = re.sub(r"(?<![\u0E00-\u0E7F\w])อำเภอ\s*เมือง(?![\u0E00-\u0E7F\w])", " ", text)
-        if result.province:
+        if result.province or result.district:
             toks = text.split()
-            if toks and self._is_province_short(toks[-1], result.province):
-                if len(toks) < 2 or toks[-2] not in (
+            while toks and ((result.province and self._is_province_short(toks[-1], result.province)) or self._is_geo_truncated(toks[-1], result.district, result.province)):
+                if len(toks) >= 2 and toks[-2] in (
                     "ซอย", "ซ.", "ถนน", "ถ.", "หมู่บ้าน", "มบ.", "อาคาร", "ตึก", "คอนโด", "ห้อง", "ชั้น", "โครงการ"
                 ):
+                    break
+                toks.pop()
+                if toks and toks[-1] in ("จังหวัด", "จ.", "จ", "อำเภอ", "อ.", "อ", "เขต"):
                     toks.pop()
-                    if toks and toks[-1] in ("จังหวัด", "จ.", "จ"):
-                        toks.pop()
-                    text = " ".join(toks)
+            text = " ".join(toks)
         result.tags, text = self._extract_tags(text)
         result.receiver, result.address_detail = self._extract_receiver_and_address(text)
-        if result.address_detail and result.province:
+        if result.address_detail and (result.province or result.district):
             toks = result.address_detail.split()
-            if toks and self._is_province_short(toks[-1], result.province):
-                if len(toks) < 2 or toks[-2] not in (
+            while toks and ((result.province and self._is_province_short(toks[-1], result.province)) or self._is_geo_truncated(toks[-1], result.district, result.province)):
+                if len(toks) >= 2 and toks[-2] in (
                     "ซอย", "ซ.", "ถนน", "ถ.", "หมู่บ้าน", "มบ.", "อาคาร", "ตึก", "คอนโด", "ห้อง", "ชั้น", "โครงการ"
                 ):
-                    detail = " ".join(toks[:-1]).strip(" ,.-/")
-                    detail = re.sub(r"\s+(?:จังหวัด|จ\.?)$", "", detail).strip(" ,.-/")
-                    result.address_detail = detail or None
+                    break
+                toks.pop()
+                if toks and toks[-1] in ("จังหวัด", "จ.", "จ", "อำเภอ", "อ.", "อ", "เขต"):
+                    toks.pop()
+            detail = " ".join(toks).strip(" ,.-/")
+            detail = re.sub(r"\s+(?:จังหวัด|จ\.?|อำเภอ|อ\.?|เขต)$", "", detail).strip(" ,.-/")
+            result.address_detail = detail or None
         return result
 
     # ── Step helpers ──────────────────────────────────────────────────────────
@@ -1050,7 +1055,7 @@ class SmartAddressParser:
         )
 
     @staticmethod
-    def _is_province_short(tok: str, prov: str) -> bool:
+    def _is_province_short(tok: str, prov: Optional[str]) -> bool:
         if not tok or not prov:
             return False
         if tok.startswith("จังหวัด"):
@@ -1082,6 +1087,39 @@ class SmartAddressParser:
             "กรุงเทพมหานคร": ("กทม", "กรุงเทพ"),
         }
         return prov in aliases and clean in aliases[prov]
+
+    @staticmethod
+    def _is_geo_truncated(tok: str, dist: Optional[str], prov: Optional[str]) -> bool:
+        if not tok:
+            return False
+        clean = tok.strip(" ,.-/")
+        if len(clean) < 4:
+            return False
+        if any(clean.startswith(p) for p in (
+            "ซอย", "ซ.", "ถนน", "ถ.", "หมู่บ้าน", "มบ.", "อาคาร", "ตึก", "คอนโด", "ห้อง", "ชั้น", "โครงการ"
+        )):
+            return False
+        d_clean = clean
+        if d_clean.startswith("อำเภอ"):
+            d_clean = d_clean[5:]
+        elif d_clean.startswith("อ."):
+            d_clean = d_clean[2:]
+        elif d_clean.startswith("เขต"):
+            d_clean = d_clean[3:]
+        if d_clean.startswith("เมือง") and len(d_clean) <= 5:
+            pass
+        elif dist and 4 <= len(d_clean) < len(dist) and dist.startswith(d_clean):
+            return True
+
+        p_clean = clean
+        if p_clean.startswith("จังหวัด"):
+            p_clean = p_clean[7:]
+        elif p_clean.startswith("จ."):
+            p_clean = p_clean[2:]
+        if prov and 4 <= len(p_clean) < len(prov) and prov.startswith(p_clean):
+            return True
+
+        return False
 
     @staticmethod
     def _clean_address_detail(text: Optional[str]) -> Optional[str]:
