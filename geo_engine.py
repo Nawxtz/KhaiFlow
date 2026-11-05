@@ -40,6 +40,10 @@ from constants import (
 
 logger = logging.getLogger("ThaiSmartAddress.geo")
 
+SUB_PFXS: Tuple[str, ...] = ("ตำบล", "แขวง", "ต.", "แขวง ", "ต ")
+DIST_PFXS: Tuple[str, ...] = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
+PROV_PFXS: Tuple[str, ...] = ("จังหวัด", "จ.", "ที่", "จ ", "แถว")
+
 # FIX [#17]: Import pythainlp word_tokenize at module level, not inside the
 # per-token hot loop in FuzzyGeoMatcher. Python caches imports after the first
 # call, but the dict lookup + attribute traversal still happens every iteration.
@@ -129,6 +133,7 @@ class GeoDatabase:
         self._pfx_indexed = False
         self._all_records: List[GeoRecord] = []
         self._loaded = False
+        self._prov_tuple: Tuple[str, ...] = ()
 
     def _build_prefix_indices(self) -> None:
         self._sub_by_pfx = defaultdict(list)
@@ -159,6 +164,7 @@ class GeoDatabase:
         for row in reader:
             self._ingest(row)
         self._loaded = True
+        self._prov_tuple = tuple(self._prov_map.keys())
         self._build_prefix_indices()
         logger.info("GeoDatabase loaded: %d records", len(self._all_records))
         return self
@@ -219,13 +225,7 @@ class GeoDatabase:
         """
         warnings_out: List[str] = []
 
-        _SUB_PFXS  = ("ตำบล", "แขวง", "ต.", "แขวง ", "ต ")
-        _DIST_PFXS = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
-        _PROV_PFXS = ("จังหวัด", "จ.", "ที่", "จ ", "แถว")
-
-        if not hasattr(self, "_prov_tuple"):
-            self._prov_tuple = tuple(self._prov_map.keys())
-        prov_prefixes = _PROV_PFXS + self._prov_tuple
+        prov_prefixes = PROV_PFXS + self._prov_tuple
 
         if zipcode_hint and zipcode_hint in self._zip_map:
             pool: List[GeoRecord] = self._zip_map[zipcode_hint]
@@ -235,7 +235,7 @@ class GeoDatabase:
                     f"Zipcode '{zipcode_hint}' not found in geo DB — using full search"
                 )
             # FIX [FIX-G1]: Build pool from map-key scans, not all_records
-            pool = self._build_candidate_pool(text, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS)
+            pool = self._build_candidate_pool(text, SUB_PFXS, DIST_PFXS, PROV_PFXS)
             if not pool and any('\u0E00' <= ch <= '\u0E7F' for ch in text):
                 # Fallback: full scan (should be rare — only when text has no
                 # recognisable geo token, e.g. keyboard-fallback input)
@@ -275,7 +275,7 @@ class GeoDatabase:
             while idx != -1:
                 end_idx = idx + tlen
                 before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                if before_ok and (pfxs is not _SUB_PFXS or not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ."))) and check_after(end_idx, follow):
+                if before_ok and (pfxs is not SUB_PFXS or not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ."))) and check_after(end_idx, follow):
                     if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
                         m.append((idx, end_idx, False, tlen))
                 idx = text.find(name, idx + 1)
@@ -283,15 +283,15 @@ class GeoDatabase:
 
         def get_sub_matches(sub: str) -> List[Tuple[int, int, bool, int]]:
             if sub not in sub_cache:
-                sub_cache[sub] = _find_matches(sub, _SUB_PFXS, _DIST_PFXS + prov_prefixes)
+                sub_cache[sub] = _find_matches(sub, SUB_PFXS, DIST_PFXS + prov_prefixes)
             return sub_cache[sub]
 
         def get_dist_matches(dist: str, prov: str) -> List[Tuple[int, int, bool, int]]:
             key = (dist, prov)
             if key not in dist_cache:
-                m = _find_matches(dist, _DIST_PFXS, prov_prefixes)
+                m = _find_matches(dist, DIST_PFXS, prov_prefixes)
                 if dist.startswith("เมือง"):
-                    prov_in_text = prov and (prov in text or any(pfx + prov in text for pfx in _PROV_PFXS))
+                    prov_in_text = prov and (prov in text or any(pfx + prov in text for pfx in PROV_PFXS))
                     if prov_in_text:
                         for muang_pfx in ("อำเภอเมือง", "อ.เมือง"):
                             flen = len(muang_pfx)
@@ -315,7 +315,7 @@ class GeoDatabase:
 
         def get_prov_matches(prov: str) -> List[Tuple[int, int, bool, int]]:
             if prov not in prov_cache:
-                prov_cache[prov] = _find_matches(prov, _PROV_PFXS, ())
+                prov_cache[prov] = _find_matches(prov, PROV_PFXS, ())
             return prov_cache[prov]
 
         if zipcode_hint and zipcode_hint in self._zip_map and not any(
@@ -324,7 +324,7 @@ class GeoDatabase:
             for r in pool
         ):
             full_pool = [
-                r for r in self._build_candidate_pool(text, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS)
+                r for r in self._build_candidate_pool(text, SUB_PFXS, DIST_PFXS, PROV_PFXS)
                 if get_sub_matches(r.sub_district)
                 and get_dist_matches(r.district, r.province)
                 and get_prov_matches(r.province)
@@ -387,7 +387,7 @@ class GeoDatabase:
             rt = _extract_receiver_tokens(text)
             if (
                 out_rec.sub_district in rt
-                and not any((pfx + out_rec.sub_district) in text for pfx in _SUB_PFXS)
+                and not any((pfx + out_rec.sub_district) in text for pfx in SUB_PFXS)
                 and not re.search(
                     re.escape(out_rec.sub_district) + r"\s*(?:อ\.|อำเภอ|เขต)?\s*" + re.escape(out_rec.district), text
                 )
@@ -418,8 +418,6 @@ class GeoDatabase:
         seen: Set[GeoRecord] = set()
         pool: List[GeoRecord] = []
 
-        if not hasattr(self, "_prov_tuple"):
-            self._prov_tuple = tuple(self._prov_map.keys())
         prov_prefixes = prov_pfxs + self._prov_tuple
 
         if not getattr(self, "_pfx_indexed", False):

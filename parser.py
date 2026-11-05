@@ -43,7 +43,13 @@ from constants import (
     expand_abbreviations,
 )
 from geo_engine import (
-    FuzzyGeoMatcher, GeoDatabase, RAPIDFUZZ_AVAILABLE, correct_typo,
+    DIST_PFXS,
+    FuzzyGeoMatcher,
+    GeoDatabase,
+    PROV_PFXS,
+    RAPIDFUZZ_AVAILABLE,
+    SUB_PFXS,
+    correct_typo,
     get_geo_strip_patterns,
 )
 from models import CorrectionRecord, NERResult, ParseResult
@@ -454,17 +460,15 @@ class SmartAddressParser:
                 geo_rec, geo_score = alt_rec, alt_score
 
         if geo_rec:
-            _SUB_PFXS = ("ตำบล", "แขวง", "ต.", "แขวง ", "ต ")
             if self._geo._wb_match(geo_rec.sub_district, text) or any(
                 re.search(re.escape(pfx + geo_rec.sub_district) + r"(?![\u0E00-\u0E7F])|" + re.escape(pfx + geo_rec.sub_district) + r"(?=อ\.|อำเภอ|เขต|จ\.|จังหวัด)", text)
-                for pfx in _SUB_PFXS
+                for pfx in SUB_PFXS
             ):
                 result.sub_district = geo_rec.sub_district
 
-            _DIST_PFXS = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
             if (result.sub_district or
                 self._geo._wb_match(geo_rec.district, text) or 
-                any((pfx + geo_rec.district) in text for pfx in _DIST_PFXS) or
+                any((pfx + geo_rec.district) in text for pfx in DIST_PFXS) or
                 (geo_rec.district.startswith("เมือง") and ("เมือง" in text or "อ.เมือง" in text or "อำเภอเมือง" in text))):
                 result.district = geo_rec.district
 
@@ -538,10 +542,7 @@ class SmartAddressParser:
             return False
         if self._MULTI_GEO_RE.search(seg):
             return True
-        _SUB_PFXS = ("ตำบล", "แขวง", "ต.", "แขวง ", "ต ")
-        _DIST_PFXS = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
-        _PROV_PFXS = ("จังหวัด", "จ.", "ที่", "จ ", "แถว")
-        return bool(self._geo._build_candidate_pool(seg, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS))
+        return bool(self._geo._build_candidate_pool(seg, SUB_PFXS, DIST_PFXS, PROV_PFXS))
 
     def _split_multi_address(self, raw_text: str, normalised: str) -> Tuple[str, bool]:
         num_m = re.search(r"(?:^|\s)1[.)]\s+(.+?)\s+2[.)]\s+(.+)$", normalised)
