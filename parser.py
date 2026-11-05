@@ -524,6 +524,11 @@ class SmartAddressParser:
 
         if result.district:
             text = re.sub(r"(?<![\u0E00-\u0E7F\w])อำเภอ\s*เมือง(?![\u0E00-\u0E7F\w])", " ", text)
+            text = re.sub(
+                r"(?<![\u0E00-\u0E7F\w])อำเภอ([ก-๙]+)",
+                lambda m: " " if result.district and correct_typo(m.group(1), [result.district], self._fuzzy_threshold)[0] else m.group(0),
+                text,
+            )
         if result.province or result.district:
             toks = text.split()
             while toks and ((result.province and self._is_province_short(toks[-1], result.province)) or self._is_geo_truncated(toks[-1], result.district, result.province)):
