@@ -398,6 +398,22 @@ class GeoDatabase:
                 else:
                     out_rec = GeoRecord(sub_district="", district=out_rec.district, province=out_rec.province, zipcode=out_rec.zipcode)
 
+        if (
+            out_rec
+            and out_rec.sub_district
+            and out_rec.province
+            and not zipcode_hint
+            and not get_dist_matches(out_rec.district, out_rec.province)
+            and not (out_rec.zipcode and out_rec.zipcode in text)
+        ):
+            if sum(1 for r in self._sub_map.get(out_rec.sub_district, []) if r.province == out_rec.province) > 1:
+                out_rec = GeoRecord(
+                    sub_district=out_rec.sub_district,
+                    district="",
+                    province=out_rec.province,
+                    zipcode="",
+                )
+
         return out_rec, best_score, warnings_out
 
     def _build_candidate_pool(

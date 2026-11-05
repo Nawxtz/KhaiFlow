@@ -33,7 +33,7 @@ import warnings as _warnings
 from typing import Dict, List, Optional, Set, Tuple
 
 from constants import (
-    ADDRESS_DETAIL_RE, CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
+    CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
     COURIER_STRIP_RE,
     FUZZY_THRESHOLD, GREETING_LEAD_PATTERN, HONORIFIC_PATTERN,
     INTENT_NEG_KEYWORDS,
@@ -55,6 +55,16 @@ from geo_engine import (
 from models import CorrectionRecord, NERResult, ParseResult
 
 logger = logging.getLogger("ThaiSmartAddress")
+
+ADDRESS_DETAIL_RE = re.compile(
+    r"(?:"
+    r"(?:^|(?<![฀-๿A-Za-z]))(?:หมู่บ้าน|ซอย|ซ\.|ถนน|ถ\.|ตรอก|อาคาร|ตึก|คอนโด|หอพัก|แฟลต|อพาร์ทเม้นท์|อพาร์ตเมนต์|ห้อง|ชั้น|โครงการ|ตู้\s*ปณ\.?|ร้านกาแฟ)[^\n]{2,120}"
+    r"|"
+    r"\d+(?:/\d+)?"
+    r"(?:\s*(?:หมู่\s*\d+|ม\.\s*\d+))?"
+    r"(?:\s*[^\n]{0,120})?"
+    r")"
+)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # OPTIONAL: PyThaiNLP
@@ -283,8 +293,7 @@ class SmartAddressParser:
         "ซอย", "ซ.", "ถนน", "ถ.", "ตรอก", "หมู่บ้าน", "หมู่", "ม.",
         "อาคาร", "ตึก", "ชั้น", "ห้อง", "คอนโด", "แฟลต", "หอพัก",
         "อพาร์ท", "อพาร์ต", "ตำบล", "อำเภอ", "จังหวัด", "แขวง", "เขต",
-        "บริษัท", "ห้างหุ้นส่วน", "หจก", "ร้าน", "โรงพยาบาล", "โรงแรม",
-        "โรงเรียน", "มหาวิทยาลัย", "เลขที่", "แอดมิน",
+        "โรงพยาบาล", "โรงแรม", "โรงเรียน", "มหาวิทยาลัย", "เลขที่", "แอดมิน",
     )
 
     @classmethod
@@ -466,14 +475,14 @@ class SmartAddressParser:
             ):
                 result.sub_district = geo_rec.sub_district
 
-            if (result.sub_district or
+            if (geo_rec.district and (result.sub_district or
                 self._geo._wb_match(geo_rec.district, text) or 
                 any((pfx + geo_rec.district) in text for pfx in DIST_PFXS) or
-                (geo_rec.district.startswith("เมือง") and ("เมือง" in text or "อ.เมือง" in text or "อำเภอเมือง" in text))):
+                (geo_rec.district.startswith("เมือง") and ("เมือง" in text or "อ.เมือง" in text or "อำเภอเมือง" in text)))):
                 result.district = geo_rec.district
 
             result.province = geo_rec.province
-            if result.sub_district and not result.zipcode:
+            if result.sub_district and geo_rec.zipcode and not result.zipcode:
                 result.zipcode = geo_rec.zipcode
                 if not (geo_score == 9 and not geo_warns and result.sub_district and result.district and result.province):
                     result.warnings.append(f"[AutoFill] Zipcode '{geo_rec.zipcode}' auto-filled from database")
@@ -599,8 +608,9 @@ class SmartAddressParser:
             before1 = normalised[: m1.start()]
             between = normalised[m1.end() : m2.start()]
             after2 = normalised[m2.end() :]
-            if sum(1 for s in (before1, between, after2) if self._has_geo_signal(s)) >= 2:
-                if self._has_geo_signal(before1):
+            b1_geo = bool(self._MULTI_GEO_RE.search(before1))
+            if b1_geo + self._has_geo_signal(between) + self._has_geo_signal(after2) >= 2:
+                if b1_geo:
                     return normalised[: m1.end()].strip(), True
                 slash_m = re.search(r"\s+[/|;]\s+", between)
                 if slash_m and self._has_geo_signal(between[: slash_m.start()]):
@@ -918,6 +928,14 @@ class SmartAddressParser:
                     trimmed: List[str] = []
                     started = False
                     for tok in clean_name.split():
+                        if not started and (
+                            tok in ("บริษัท", "บจก", "บ.", "หจก", "ห้างหุ้นส่วน")
+                            or tok.startswith(("บริษัท", "บจก", "บ.", "หจก", "ห้างหุ้นส่วน"))
+                            or (tok.startswith("ร้าน") and not tok.startswith("ร้านกาแฟ"))
+                        ):
+                            started = True
+                            trimmed.append(tok)
+                            continue
                         is_stop = self._is_name_stop(tok)
                         if is_stop:
                             if started:
@@ -955,7 +973,7 @@ class SmartAddressParser:
         if receiver:
             receiver = re.sub(r"\s+ที่\s*[ก-๙]+.*$", "", receiver).strip()
             receiver = re.sub(r"^[\s()\[\]{}<>\"'/（）【】［］｛｝]+|[\s()\[\]{}<>\"'/（）【】［］｛｝]+$", "", receiver).strip()
-            if len(receiver) < 2 or self._is_name_stop(receiver):
+            if len(receiver) < 2 or self._is_name_stop(receiver) or receiver.startswith("ร้านกาแฟ"):
                 receiver = None
 
         # [FIX-P3] Pass D: Trailing personal name.
@@ -1065,21 +1083,22 @@ class SmartAddressParser:
                 return result
 
             # Only copy sub_district when fuzzy actually matched a sub_district token.
-            sub_corrected = any(c.startswith('ตำบล') and fuzzy_rec.sub_district in c for c in corrections)
+            sub_corrected = not result.sub_district and any(c.startswith('ตำบล') and fuzzy_rec.sub_district in c for c in corrections)
             if sub_corrected:
-                result.sub_district = result.sub_district or fuzzy_rec.sub_district
-            dist_corrected = any(c.startswith('อำเภอ') and fuzzy_rec.district in c for c in corrections)
+                result.sub_district = fuzzy_rec.sub_district
+            dist_corrected = not result.district and any(c.startswith('อำเภอ') and fuzzy_rec.district in c for c in corrections)
             if dist_corrected:
-                result.district = result.district or fuzzy_rec.district
+                result.district = fuzzy_rec.district
             result.province     = result.province     or fuzzy_rec.province
             if not result.zipcode and (sub_corrected or dist_corrected):
                 result.zipcode  = fuzzy_rec.zipcode
                 result.warnings.append(f"[AutoFill] Zipcode '{fuzzy_rec.zipcode}' auto-filled from database")
-            for c in corrections:
-                result.warnings.append(f"[FuzzyCorrection] {c}")
-                m_src = re.match(r"(?:ตำบล|อำเภอ): '((?:ตำบล|อำเภอ|แขวง|เขต|ต\.|อ\.)[^']+)' →", c)
-                if m_src and result.address_detail and m_src.group(1) in result.address_detail:
-                    result.address_detail = re.sub(r"\s{2,}", " ", result.address_detail.replace(m_src.group(1), " ")).strip() or None
+            if sub_corrected or dist_corrected:
+                for c in corrections:
+                    result.warnings.append(f"[FuzzyCorrection] {c}")
+                    m_src = re.match(r"(?:ตำบล|อำเภอ): '((?:ตำบล|อำเภอ|แขวง|เขต|ต\.|อ\.)[^']+)' →", c)
+                    if m_src and result.address_detail and m_src.group(1) in result.address_detail:
+                        result.address_detail = re.sub(r"\s{2,}", " ", result.address_detail.replace(m_src.group(1), " ")).strip() or None
 
         return result
 
