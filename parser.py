@@ -214,6 +214,12 @@ class SmartAddressParser:
 
     def parse(self, raw_text: str) -> ParseResult:
         t0 = time.perf_counter()
+        if not isinstance(raw_text, str):
+            return ParseResult(
+                status="Error",
+                warnings=["Input must be a string"],
+                processing_ms=self._elapsed(t0),
+            )
 
         # FIX [#19]: Strip chat junk BEFORE the Intent Shield.
         # The shield runs on the raw string and looks for negative keywords.
@@ -280,11 +286,11 @@ class SmartAddressParser:
             try:
                 results.append(self.parse(t))
             except Exception as exc:
-                logger.error("parse_batch: unhandled error for input %r: %s", t[:80], exc, exc_info=True)
+                logger.error("parse_batch: unhandled error for input %r: %s", repr(t)[:80], exc, exc_info=True)
                 results.append(ParseResult(
                     status="Error",
                     confidence=0.0,
-                    warnings=[f"Internal error during parsing: {exc}"],
+                    warnings=["Internal error during parsing"],
                 ))
         return results
 
