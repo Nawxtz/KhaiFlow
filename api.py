@@ -298,20 +298,21 @@ async def lifespan(app: FastAPI):
     else:
         env_path = os.getenv("GEO_CSV_PATH", "")
         geo_degraded = True
+        geo_db = build_mock_geo_db()
+        geo_source = f"mock:{geo_db.size}-records"
         # ERROR, not warning: this is a data-correctness incident, not a
         # cosmetic degradation. Nearly every non-trivial address will resolve
-        # to the wrong province/district while running on the 26-row mock DB.
+        # to the wrong province/district while running on the mock DB.
         logger.error(
-            "GEO CSV NOT FOUND — falling back to 26-record MOCK geo database. "
+            "GEO CSV NOT FOUND — falling back to %d-record MOCK geo database. "
             "Production address parsing WILL be wrong for any place outside "
             "the mock set. Tried GEO_CSV_PATH=%r and the conventional "
             "data/thai_address_full.csv path next to api.py. "
             "Fix: bundle the CSV with the deployment (see vercel.json "
             "'includeFiles') and/or set GEO_CSV_PATH correctly.",
+            geo_db.size,
             env_path or "(not set)",
         )
-        geo_db = build_mock_geo_db()
-        geo_source = "mock:26-records"
 
     # 3. Instantiate parser
     parser = SmartAddressParser(geo_db)
@@ -392,7 +393,7 @@ app = FastAPI(
 @app.get("/")
 async def serve_admin_dashboard():
     from fastapi.responses import FileResponse
-    return FileResponse("index.html")
+    return FileResponse(_APP_DIR / "index.html")
 
 # FIX [#23]: Prometheus metrics at /metrics — enables latency/error/throughput
 # alerting without any additional instrumentation code in endpoint handlers.
@@ -426,10 +427,11 @@ class _RealIPMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
-app.add_middleware(_RealIPMiddleware)
-
 # ── Rate limiting (FIX [FIX-A1]) ──────────────────────────────────────────────
+# Added first so it runs AFTER _RealIPMiddleware (Starlette: last added runs first).
 app.add_middleware(_RateLimitMiddleware)
+
+app.add_middleware(_RealIPMiddleware)
 
 # ── CORS (FIX [FIX-A2]) ───────────────────────────────────────────────────────
 # FIX [FIX-A2]: Replaced wildcard allow_headers=["*"] with an explicit list.
@@ -515,6 +517,8 @@ class BatchParseRequest(BaseModel):
     @field_validator("texts")
     @classmethod
     def validate_texts(cls, v: List[str]) -> List[str]:
+        if any(len(t) > 2001 or len(t.replace(" ", "")) > 2000 for t in v):
+            raise ValueError("each text must not exceed 2000 characters")
         cleaned = [t.strip() for t in v if t.strip()]
         if not cleaned:
             raise ValueError("texts list must contain at least one non-blank string")

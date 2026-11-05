@@ -62,10 +62,12 @@ class ParseResult:
                 continue
             # Apply type coercion per field category
             if k in ("tags", "warnings"):
-                if not isinstance(v, list):
-                    v = list(v) if v is not None else []
-                else:
+                if isinstance(v, list):
                     v = [str(item) for item in v]
+                elif isinstance(v, str):
+                    v = [v]
+                else:
+                    v = []
             elif k == "confidence":
                 try:
                     v = float(v) if v is not None else 0.0
