@@ -236,7 +236,7 @@ class GeoDatabase:
                 )
             # FIX [FIX-G1]: Build pool from map-key scans, not all_records
             pool = self._build_candidate_pool(text, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS)
-            if not pool:
+            if not pool and any('\u0E00' <= ch <= '\u0E7F' for ch in text):
                 # Fallback: full scan (should be rare — only when text has no
                 # recognisable geo token, e.g. keyboard-fallback input)
                 pool = self._all_records

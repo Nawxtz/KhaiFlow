@@ -13,9 +13,6 @@ Parse pipeline per request:
     Final     Strict Validation    — confidence + flag low-quality results
 
 NEW FIXES applied (this version):
-  [FIX-P1] Removed duplicate module-level _SKIP_WORDS definition. It was
-            defined at module scope AND re-defined inside keyboard_fallback(),
-            making the outer definition silent dead code.
   [FIX-P2] Text is normalised ONCE in parse() and passed to both
             _rule_based_parse() and _apply_fuzzy_geo(). Previously
             _apply_fuzzy_geo() called _normalise() a second time on an already-
@@ -33,7 +30,7 @@ import time
 import threading
 import unicodedata
 import warnings as _warnings
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from constants import (
     ADDRESS_DETAIL_RE, CHAT_JUNK_PATTERN, CONNECTOR_PATTERN,
@@ -102,19 +99,6 @@ def _do_ner_task(text: str) -> List[Tuple[str, str]]:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# KEYBOARD LAYOUT FALLBACK  (Phase 0)
-# ──────────────────────────────────────────────────────────────────────────────
-
-# FIX [FIX-P1]: Removed the duplicate module-level _SKIP_WORDS definition.
-# The authoritative set is defined ONLY inside keyboard_fallback() below.
-
-def keyboard_fallback(text: str):
-    """Keyboard fallback removed — was corrupting English names/IDs."""
-    return text, False
-
-
-
-# ──────────────────────────────────────────────────────────────────────────────
 # NER FALLBACK  (Phase C)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -164,6 +148,100 @@ def ner_extract(text: str) -> NERResult:
         result.used_ner = False
 
     return result
+
+
+_DETAIL_NOISE_RES: List[re.Pattern] = [
+    re.compile(p, flags=re.IGNORECASE)
+    for p in (
+        # Chat leftovers
+        r"(?:ออเดอร์|รหัสลูกค้า)\s*[:#\-]?\s*\d+",
+        r"[\U00010000-\U0010ffff\u200d\u2300-\u27bf\u2b00-\u2bff\ufe00-\ufe0f]+",
+        r"\([^)]*(?:ตอน\s*(?:เช้า|สาย|เที่ยง|บ่าย|เย็น|ค่ำ|ดึก)|ช่วง\s*(?:เช้า|สาย|เที่ยง|บ่าย|เย็น|ค่ำ|ดึก|\d+)|(?:ก่อน|หลัง)\s*(?:\d+\s*โมง|\d+[:.]\d+|เที่ยง|บ่าย)|(?:โทร|ติดต่อ)\s*(?:ก่อน|แจ้ง|บอก|หา|นัด|ตาม|ส่ง|\d)|(?<=\s|\()ก่อน(?:\s*ส่ง)?(?=\s|\)))[^)]*\)",
+        r"(?:ขอ|ต้องการ)?ใบกำกับภาษี(?:\s*เต็มรูปแบบ)?[^\s]*",
+
+        # Urgent & instructions
+        r"ของต้องถึง(?:ภายใน[^\s]+|วัน[^\s]+|พรุ่งนี้|ด่วน)?",
+        r"ต้องถึง(?:ภายใน[^\s]+|วัน[^\s]+|พรุ่งนี้|ด่วน)?",
+        r"ของขวัญต้องถึงภายใน[^\s]+",
+        r"(?:ต้อง)?ใช้(?:ในงาน)?(?:วัน[^\s]+|พรุ่งนี้|ด่วน)?",
+        r"ต้องการใช้พรุ่งนี้",
+        r"เพราะต้องใช้[^\s]*",
+        r"ขอให้ถึง(?:ก่อนวัน[^\s]+|เร็วที่สุด|ภายใน[^\s]+)",
+        r"(?:ขอให้|ฝาก)?(?:จัด)?ส่ง(?:ให้)?(?:ภายในวัน[^\s]+|วันนี้นะคะ|วันนี้|ก่อนวัน[^\s]+|ด่วน(?:ที่สุด|มาก)?|เร็ว(?:ที่สุด)?)",
+        r"(?:ขอ)?ส่งก่อนเที่ยง[^\s]*",
+        r"ก่อนเที่ยง[^\s]*",
+        r"(?:ขอ)?ส่งก่อนบ่าย[^\s]*",
+        r"ก่อนบ่าย[^\s]*",
+        r"ฝากจัด[^\s]*",
+        r"รบกวนส่งด่วนมาก|รบกวนส่งเร็ว",
+        r"ขอส่งด่วน(?:ที่สุด)?",
+        r"ขอส่งเร็ว(?:ที่สุด)?",
+        r"รีบส่ง(?:ให้หน่อย|นะคะ|นะ|ด้วย)?",
+        r"ถ้าเป็นไปได้ขอ[^\s]*",
+        r"(?:ถึงก่อน|ถึงภายใน|ก่อนวัน|ภายในวัน|ในงาน|วันเสาร์|วันอาทิตย์|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัส|วันศุกร์|วันพรุ่งนี้|วันนี้|พรุ่งนี้)[^\s]*",
+        r"(?:จัด)?ส่ง(?:ให้)?(?:เร็ว|ด่วน)[^\s]*",
+        r"(?:เร็ว|ด่วน)(?:ที่สุด|มาก|ๆ)?",
+        r"(?:จัด)?ภายใน[^\s]*",
+        r"ใช้พรุ่งนี้",
+        r"วันพรุ่งนี้",
+        r"พรุ่งนี้",
+        r"ด่วนจี๋",
+        r"ด่วนมาก",
+        r"ด่วนที่สุด",
+        r"ด่วน",
+
+        # Fragile & products
+        r"(?:ของ)?(?:มี)?(?:เครื่องแก้วและเซรามิก|จานเซรามิกและแก้วไวน์|จานเซรามิก|เซรามิก|ขวดน้ำหอม|แก้วกาแฟ|แก้วไวน์|แจกันแก้ว|ขวดแก้ว|เครื่องแก้ว|กระจก|จานกระเบื้อง|กระเบื้อง|ของเปราะบาง|จาน|แก้ว|ขวด|ชาม|สิ่งของ|สินค้า)?\s*(?:แตกง่าย|เปราะบาง|แตกได้)(?:และ|ค่ะ|ครับ|นะคะ)?",
+        r"(?:ของ|สินค้า|ข้างใน|ในกล่อง|กล่องนี้|กล่อง)?\s*(?:เป็น|มี)?\s*(?:เครื่องแก้วและเซรามิก|จานเซรามิกและแก้วไวน์|จานเซรามิก|เซรามิก|ขวดน้ำหอม|แก้วกาแฟ|แก้วไวน์|แจกันแก้ว|ขวดแก้ว|เครื่องแก้ว|กระจก|จานกระเบื้อง|กระเบื้อง|ของเปราะบาง)(?:หลายใบ)?(?:ค่ะ|ครับ|นะคะ)?",
+        r"(?:ฝาก)?ระวัง(?:ของ)?แตก(?:ด้วย(?:ค่ะ|ครับ|นะคะ)?)?",
+        r"กล่องแก้ว|กล่องมีแก้ว|มีแก้ว",
+        r"(?:ขอ)?(?:ห่อ)?(?:กันกระแทก|บับเบิล)(?:หลายชั้น)?",
+        r"ขอแพ็กแน่นๆ",
+        r"กล่องนี้ไม่แตกง่าย(?:ครับ|ค่ะ)?",
+        r"กล่องนี้มี(?:แจกัน)?แก้ว",
+        r"มีแจกันแก้ว|มีแก้ว",
+        r"กล่องนี้",
+        r"(?:รบกวน|ฝาก)?ติด(?:สติ๊กเกอร์)?\s*(?:fragile)?",
+        r"ของแตกง่าย(?:นะคะ|นะ|ครับ|ค่ะ)?",
+        r"แตกง่าย(?:และ|ค่ะ|ครับ|นะคะ)?",
+        r"หลายใบ|หลายชั้น",
+        r"ฝากติด",
+        r"(?:วันนี้ต้องใช้|ต้องใช้วันนี้)(?:ค่ะ|ครับ|นะคะ)?",
+
+        # Guard / fold / dry instructions
+        r"(?:(?:ฝาก|วาง)(?:ไว้)?(?:ที่|กับ)?)?(?:ป้อมยาม|ป้อมหน้า|ป้อมประตู|รปภ\.?|security)(?:\s*ไว้)?(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+        r"(?:ห้าม|อย่า)พับ(?:\s*เด็ดขาด)?(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+        r"(?:ห้าม|อย่า)เปียก(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+        r"(?:ห้าม|อย่า)วาง(?:ไว้)?หน้า(?:ประตู|บ้าน|ห้อง)(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
+        r"(?:ไม่(?:ต้อง)?\s*)?(?:(?:เก็บ|ชำระ|จ่าย)(?:เงิน)?ปลายทาง|\bcod\b)(?:\s*(?:นะคะ|นะ|ค่ะ|คะ|ครับ|ด้วย))*",
+
+        # Delivery mode / negative
+        r"ไม่มีของแตก(?:ครับ|ค่ะ)?",
+        r"(?:[0-9๐-๙]+|หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ)\s*นาที(?:ค่ะ|ครับ|นะคะ|นะ)?",
+        r"ของไม่แตก(?:ครับ|ค่ะ)?",
+        r"มี(?:สุนัข|หมา)ดุ(?:ระวัง)?(?:ด้วย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
+        r"ไม่มีคำสั่งพิเศษ(?:ครับ|ค่ะ)?",
+        r"วางไว้หน้า(?:บ้าน|ประตู|ห้อง)(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ|จ้ะ|จ้า))?",
+        r"ไม่ต้อง\s*(?:ติด)?\s*แท็ก(?:ครับ|ค่ะ)?",
+        r"ไม่ต้องรีบ(?:นะคะ|นะ|ครับ|ค่ะ)?",
+        r"(?:ไม่ต้อง|อย่า)\s*กดกริ่ง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
+        r"(?:ไม่อยู่บ้าน)?ฝากเพื่อนบ้าน(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
+        r"(?:^|\s)ถึงแล้ว(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?(?=\s|$)",
+        r"(?:^|\s)(?:มาก่อน\s*)?ถึงแล้วบอก(?:ด้วย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?(?=\s|$)",
+        r"ไม่ต้อง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
+        r"(?:ส่ง)?ตามรอบ(?:ปกติ)?(?:ได้)?(?:เลย)?(?:ครับ|ค่ะ|นะคะ)?",
+        r"ส่ง(?:ได้ตาม)?ปกติ(?:ครับ|ค่ะ)?",
+        r"ส่งธรรมดาได้(?:เลย(?:ครับ|ค่ะ)?)?",
+        r"ฝาก(?:ไว้)?(?:ที่|กับ)\s*(?:แม่บ้าน|นิติบุคคล|นิติ|เจ้าหน้าที่|เคาน์เตอร์)(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
+        r"ได้ตามปกติ",
+        r"ถึง(?:หน้า)?ปากซอยแล้ว(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
+        r"ปกติ",
+
+        # Stray remaining connectors / preambles / suffixes / isolated province tokens
+        r"(?:^|\s)ที่(?:เชียงใหม่|นนทบุรี|กรุงเทพมหานคร|ภูเก็ต|ชลบุรี|ขอนแก่น|ปทุมธานี|กาญจนบุรี|ลพบุรี|เพชรบุรี|ลำพูน|อุดรธานี|นครราชสีมา)(?=\s|$)",
+        r"(?:^|\s)(?:ช่วยส่งให้|ช่วยส่ง|ส่งให้|จัดส่งให้|ช่วย|จัดส่ง|ของเป็น|เป็นจาน|เป็นขวด|ในกล่องมี|ข้างในเป็น|มีของ|สิน|ของ|เป็น|และ|หรือ|ขอ|ฝาก|รบกวน|เพราะ|หน่อย|รหัส|เลยนะ|เลย|หา|กรุณา|อย่าลืม|พี่|ด้วยนะ|ด้วย|ครับ|ค่ะ|คะ|นะคะ|นะค่ะ|จ้า|จ๊ะ|จ้ะ|ค้า|วันน|พรุ่งน|จัด|ภายใน|เร็ว|ด่วน|สุด|มี|ถึงก่อนวันเสาร|ภายในวันศุกร)(?=\s|$)",
+    )
+]
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -233,8 +311,7 @@ class SmartAddressParser:
         if reject:
             return reject
 
-        # Phase 0: Keyboard Layout Fallback (on original raw text for accuracy)
-        text, kb_converted = keyboard_fallback(raw_text)
+        text = raw_text
 
         # FIX [FIX-P2]: Normalise ONCE here, then pass the result to both
         # _rule_based_parse and _apply_fuzzy_geo. Previously _apply_fuzzy_geo
@@ -258,9 +335,6 @@ class SmartAddressParser:
 
         if is_multi:
             result.warnings.append("[MultiAddress] Multiple addresses detected in one message")
-
-        if kb_converted:
-            result.warnings.append("[KeyboardFallback] Input auto-converted to Thai")
 
         # Phase B: Fuzzy Geo Correction
         geo_incomplete = not all([result.province, result.district, result.sub_district])
@@ -470,16 +544,30 @@ class SmartAddressParser:
 
         if "\n" in raw_text:
             lines = [ln.strip() for ln in raw_text.splitlines() if ln.strip()]
+            norm_cache: Dict[int, str] = {}
+
+            def _get_norm(i: int) -> str:
+                if i not in norm_cache:
+                    try:
+                        norm_cache[i] = self._normalise(lines[i])
+                    except ValueError:
+                        norm_cache[i] = ""
+                return norm_cache[i]
+
+            head_has_phone = False
             for k in range(1, len(lines)):
-                head_raw = "\n".join(lines[:k])
-                tail_raw = "\n".join(lines[k:])
-                if re.match(r"^\s*1[.)]\s+", head_raw) and re.match(r"^\s*2[.)]\s+", tail_raw):
-                    head_raw = re.sub(r"^\s*1[.)]\s+", "", head_raw)
-                try:
-                    head_norm = self._normalise(head_raw)
-                    tail_norm = self._normalise(tail_raw)
-                except ValueError:
+                if not head_has_phone:
+                    prev_ln = lines[k - 1].translate(str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789"))
+                    if not self._find_phones(prev_ln):
+                        continue
+                    head_has_phone = True
+
+                head_norm = " ".join(_get_norm(i) for i in range(k) if _get_norm(i)).strip()
+                tail_norm = " ".join(_get_norm(i) for i in range(k, len(lines)) if _get_norm(i)).strip()
+                if not head_norm or not tail_norm:
                     continue
+                if re.match(r"^\s*1[.)]\s+", head_norm) and re.match(r"^\s*2[.)]\s+", tail_norm):
+                    head_norm = re.sub(r"^\s*1[.)]\s+", "", head_norm).strip()
                 p_head = self._find_phones(head_norm)
                 p_tail = self._find_phones(tail_norm)
                 if (
@@ -634,45 +722,35 @@ class SmartAddressParser:
         return text
 
     def _extract_phone(self, text: str) -> Tuple[Optional[str], str]:
-        for m in PHONE_RE.finditer(text):
-            if m.start() > 0 and text[m.start() - 1].isdigit():
-                if m.start() < 5 or text[m.start() - 5 : m.start()] not in self._valid_zips:
-                    continue
-            raw = re.sub(r"[\s\-\./]", "", m.group())
-            if raw.startswith("+66"):
-                raw = "0" + raw[3:]
-            elif raw.startswith("66") and not raw.startswith("0"):
-                raw = "0" + raw[2:]
-            start = m.start()
-            end = m.end()
-            if start > 0 and text[start - 1] in "([{" and end < len(text) and text[end] in ")]}":
+        # Uses self._find_phones(text) which validates adjacent self._valid_zips
+        matches = self._find_phones(text)
+        if not matches:
+            return None, text
+        m, raw = matches[0]
+        start = m.start()
+        end = m.end()
+        if start > 0 and text[start - 1] in "([{" and end < len(text) and text[end] in ")]}":
+            start -= 1
+            end += 1
+        text = text[: start] + " " + text[end:]
+        while True:
+            more = self._find_phones(text)
+            if not more:
+                break
+            m2, _ = more[0]
+            start = m2.start()
+            end = m2.end()
+            prefix = text[:start]
+            sep_m = re.search(r"\s*(?:/|,|หรือ)\s*$", prefix)
+            if sep_m:
+                start = sep_m.start()
+            elif start > 0 and text[start - 1] in "([{" and end < len(text) and text[end] in ")]}":
                 start -= 1
                 end += 1
-            text = text[: start] + " " + text[end:]
-            while True:
-                found = False
-                for m2 in PHONE_RE.finditer(text):
-                    if m2.start() > 0 and text[m2.start() - 1].isdigit():
-                        if m2.start() < 5 or text[m2.start() - 5 : m2.start()] not in self._valid_zips:
-                            continue
-                    start = m2.start()
-                    end = m2.end()
-                    prefix = text[:start]
-                    sep_m = re.search(r"\s*(?:/|,|หรือ)\s*$", prefix)
-                    if sep_m:
-                        start = sep_m.start()
-                    elif start > 0 and text[start - 1] in "([{" and end < len(text) and text[end] in ")]}":
-                        start -= 1
-                        end += 1
-                    text = text[:start] + " " + text[end:]
-                    found = True
-                    break
-                if not found:
-                    break
-            while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", text):
-                text = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", text)
-            return raw, re.sub(r"\s+", " ", text).strip()
-        return None, text
+            text = text[:start] + " " + text[end:]
+        while re.search(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", text):
+            text = re.sub(r"[\(\[\{<（【［｛]\s*[\)\]\}>）】］｝]", " ", text)
+        return raw, re.sub(r"\s+", " ", text).strip()
 
     def _extract_zipcode(self, text: str) -> Tuple[Optional[str], str]:
         matches = [m for m in ZIPCODE_RE.finditer(text) if not self._is_monetary_zip(text, m)]
@@ -934,97 +1012,8 @@ class SmartAddressParser:
         if not text:
             return None
         t = text
-        _NOISE_PATS = [
-            # Chat leftovers
-            r"(?:ออเดอร์|รหัสลูกค้า)\s*[:#\-]?\s*\d+",
-            r"[\U00010000-\U0010ffff\u200d\u2300-\u27bf\u2b00-\u2bff\ufe00-\ufe0f]+",
-            r"\([^)]*(?:ตอน\s*(?:เช้า|สาย|เที่ยง|บ่าย|เย็น|ค่ำ|ดึก)|ช่วง\s*(?:เช้า|สาย|เที่ยง|บ่าย|เย็น|ค่ำ|ดึก|\d+)|(?:ก่อน|หลัง)\s*(?:\d+\s*โมง|\d+[:.]\d+|เที่ยง|บ่าย)|(?:โทร|ติดต่อ)\s*(?:ก่อน|แจ้ง|บอก|หา|นัด|ตาม|ส่ง|\d)|(?<=\s|\()ก่อน(?:\s*ส่ง)?(?=\s|\)))[^)]*\)",
-            r"(?:ขอ|ต้องการ)?ใบกำกับภาษี(?:\s*เต็มรูปแบบ)?[^\s]*",
-
-            # Urgent & instructions
-            r"ของต้องถึง(?:ภายใน[^\s]+|วัน[^\s]+|พรุ่งนี้|ด่วน)?",
-            r"ต้องถึง(?:ภายใน[^\s]+|วัน[^\s]+|พรุ่งนี้|ด่วน)?",
-            r"ของขวัญต้องถึงภายใน[^\s]+",
-            r"(?:ต้อง)?ใช้(?:ในงาน)?(?:วัน[^\s]+|พรุ่งนี้|ด่วน)?",
-            r"ต้องการใช้พรุ่งนี้",
-            r"เพราะต้องใช้[^\s]*",
-            r"ขอให้ถึง(?:ก่อนวัน[^\s]+|เร็วที่สุด|ภายใน[^\s]+)",
-            r"(?:ขอให้|ฝาก)?(?:จัด)?ส่ง(?:ให้)?(?:ภายในวัน[^\s]+|วันนี้นะคะ|วันนี้|ก่อนวัน[^\s]+|ด่วน(?:ที่สุด|มาก)?|เร็ว(?:ที่สุด)?)",
-            r"(?:ขอ)?ส่งก่อนเที่ยง[^\s]*",
-            r"ก่อนเที่ยง[^\s]*",
-            r"(?:ขอ)?ส่งก่อนบ่าย[^\s]*",
-            r"ก่อนบ่าย[^\s]*",
-            r"ฝากจัด[^\s]*",
-            r"รบกวนส่งด่วนมาก|รบกวนส่งเร็ว",
-            r"ขอส่งด่วน(?:ที่สุด)?",
-            r"ขอส่งเร็ว(?:ที่สุด)?",
-            r"รีบส่ง(?:ให้หน่อย|นะคะ|นะ|ด้วย)?",
-            r"ถ้าเป็นไปได้ขอ[^\s]*",
-            r"(?:ถึงก่อน|ถึงภายใน|ก่อนวัน|ภายในวัน|ในงาน|วันเสาร์|วันอาทิตย์|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัส|วันศุกร์|วันพรุ่งนี้|วันนี้|พรุ่งนี้)[^\s]*",
-            r"(?:จัด)?ส่ง(?:ให้)?(?:เร็ว|ด่วน)[^\s]*",
-            r"(?:เร็ว|ด่วน)(?:ที่สุด|มาก|ๆ)?",
-            r"(?:จัด)?ภายใน[^\s]*",
-            r"ใช้พรุ่งนี้",
-            r"วันพรุ่งนี้",
-            r"พรุ่งนี้",
-            r"ด่วนจี๋",
-            r"ด่วนมาก",
-            r"ด่วนที่สุด",
-            r"ด่วน",
-
-            # Fragile & products
-            r"(?:ของ)?(?:มี)?(?:เครื่องแก้วและเซรามิก|จานเซรามิกและแก้วไวน์|จานเซรามิก|เซรามิก|ขวดน้ำหอม|แก้วกาแฟ|แก้วไวน์|แจกันแก้ว|ขวดแก้ว|เครื่องแก้ว|กระจก|จานกระเบื้อง|กระเบื้อง|ของเปราะบาง|จาน|แก้ว|ขวด|ชาม|สิ่งของ|สินค้า)?\s*(?:แตกง่าย|เปราะบาง|แตกได้)(?:และ|ค่ะ|ครับ|นะคะ)?",
-            r"(?:ของ|สินค้า|ข้างใน|ในกล่อง|กล่องนี้|กล่อง)?\s*(?:เป็น|มี)?\s*(?:เครื่องแก้วและเซรามิก|จานเซรามิกและแก้วไวน์|จานเซรามิก|เซรามิก|ขวดน้ำหอม|แก้วกาแฟ|แก้วไวน์|แจกันแก้ว|ขวดแก้ว|เครื่องแก้ว|กระจก|จานกระเบื้อง|กระเบื้อง|ของเปราะบาง)(?:หลายใบ)?(?:ค่ะ|ครับ|นะคะ)?",
-            r"(?:ฝาก)?ระวัง(?:ของ)?แตก(?:ด้วย(?:ค่ะ|ครับ|นะคะ)?)?",
-            r"กล่องแก้ว|กล่องมีแก้ว|มีแก้ว",
-            r"(?:ขอ)?(?:ห่อ)?(?:กันกระแทก|บับเบิล)(?:หลายชั้น)?",
-            r"ขอแพ็กแน่นๆ",
-            r"กล่องนี้ไม่แตกง่าย(?:ครับ|ค่ะ)?",
-            r"กล่องนี้มี(?:แจกัน)?แก้ว",
-            r"มีแจกันแก้ว|มีแก้ว",
-            r"กล่องนี้",
-            r"(?:รบกวน|ฝาก)?ติด(?:สติ๊กเกอร์)?\s*(?:fragile)?",
-            r"ของแตกง่าย(?:นะคะ|นะ|ครับ|ค่ะ)?",
-            r"แตกง่าย(?:และ|ค่ะ|ครับ|นะคะ)?",
-            r"หลายใบ|หลายชั้น",
-            r"ฝากติด",
-            r"(?:วันนี้ต้องใช้|ต้องใช้วันนี้)(?:ค่ะ|ครับ|นะคะ)?",
-
-            # Guard / fold / dry instructions
-            r"(?:(?:ฝาก|วาง)(?:ไว้)?(?:ที่|กับ)?)?(?:ป้อมยาม|ป้อมหน้า|ป้อมประตู|รปภ\.?|security)(?:\s*ไว้)?(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
-            r"(?:ห้าม|อย่า)พับ(?:\s*เด็ดขาด)?(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
-            r"(?:ห้าม|อย่า)เปียก(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
-            r"(?:ห้าม|อย่า)วาง(?:ไว้)?หน้า(?:ประตู|บ้าน|ห้อง)(?:\s*(?:ได้|เลย|นะ|ด้วย|นะคะ|นะค่ะ|ค่ะ|คะ|ครับ))*",
-            r"(?:ไม่(?:ต้อง)?\s*)?(?:(?:เก็บ|ชำระ|จ่าย)(?:เงิน)?ปลายทาง|\bcod\b)(?:\s*(?:นะคะ|นะ|ค่ะ|คะ|ครับ|ด้วย))*",
-
-            # Delivery mode / negative
-            r"ไม่มีของแตก(?:ครับ|ค่ะ)?",
-            r"(?:[0-9๐-๙]+|หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|สิบ)\s*นาที(?:ค่ะ|ครับ|นะคะ|นะ)?",
-            r"ของไม่แตก(?:ครับ|ค่ะ)?",
-            r"มี(?:สุนัข|หมา)ดุ(?:ระวัง)?(?:ด้วย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
-            r"ไม่มีคำสั่งพิเศษ(?:ครับ|ค่ะ)?",
-            r"วางไว้หน้า(?:บ้าน|ประตู|ห้อง)(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ|จ้ะ|จ้า))?",
-            r"ไม่ต้อง\s*(?:ติด)?\s*แท็ก(?:ครับ|ค่ะ)?",
-            r"ไม่ต้องรีบ(?:นะคะ|นะ|ครับ|ค่ะ)?",
-            r"(?:ไม่ต้อง|อย่า)\s*กดกริ่ง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
-            r"(?:ไม่อยู่บ้าน)?ฝากเพื่อนบ้าน(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
-            r"(?:^|\s)ถึงแล้ว(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?(?=\s|$)",
-            r"(?:^|\s)(?:มาก่อน\s*)?ถึงแล้วบอก(?:ด้วย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?(?=\s|$)",
-            r"ไม่ต้อง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
-            r"(?:ส่ง)?ตามรอบ(?:ปกติ)?(?:ได้)?(?:เลย)?(?:ครับ|ค่ะ|นะคะ)?",
-            r"ส่ง(?:ได้ตาม)?ปกติ(?:ครับ|ค่ะ)?",
-            r"ส่งธรรมดาได้(?:เลย(?:ครับ|ค่ะ)?)?",
-            r"ฝาก(?:ไว้)?(?:ที่|กับ)\s*(?:แม่บ้าน|นิติบุคคล|นิติ|เจ้าหน้าที่|เคาน์เตอร์)(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
-            r"ได้ตามปกติ",
-            r"ถึง(?:หน้า)?ปากซอยแล้ว(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
-            r"ปกติ",
-
-            # Stray remaining connectors / preambles / suffixes / isolated province tokens
-            r"(?:^|\s)ที่(?:เชียงใหม่|นนทบุรี|กรุงเทพมหานคร|ภูเก็ต|ชลบุรี|ขอนแก่น|ปทุมธานี|กาญจนบุรี|ลพบุรี|เพชรบุรี|ลำพูน|อุดรธานี|นครราชสีมา)(?=\s|$)",
-            r"(?:^|\s)(?:ช่วยส่งให้|ช่วยส่ง|ส่งให้|จัดส่งให้|ช่วย|จัดส่ง|ของเป็น|เป็นจาน|เป็นขวด|ในกล่องมี|ข้างในเป็น|มีของ|สิน|ของ|เป็น|และ|หรือ|ขอ|ฝาก|รบกวน|เพราะ|หน่อย|รหัส|เลยนะ|เลย|หา|กรุณา|อย่าลืม|พี่|ด้วยนะ|ด้วย|ครับ|ค่ะ|คะ|นะคะ|นะค่ะ|จ้า|จ๊ะ|จ้ะ|ค้า|วันน|พรุ่งน|จัด|ภายใน|เร็ว|ด่วน|สุด|มี|ถึงก่อนวันเสาร|ภายในวันศุกร)(?=\s|$)",
-        ]
-        for p in _NOISE_PATS:
-            t = re.sub(p, " ", t, flags=re.IGNORECASE)
+        for p in _DETAIL_NOISE_RES:
+            t = p.sub(" ", t)
         # Strip isolated stray vowels / tone marks at word boundaries or ends
         t = re.sub(r"(?:^|\s)[\u0E30-\u0E39\u0E47-\u0E4E]+(?=\s|$)", " ", t)
         t = re.sub(r"(?:^|\s)หมู่\s*$", " ", t)
@@ -1150,8 +1139,7 @@ class SmartAddressParser:
         receiver_garbage = bool(receiver_val) and len(receiver_bare) < 2
 
         fields_filled = sum(
-            1 for f in ("receiver", "phone", "address_detail",
-                        "sub_district", "district", "province", "zipcode")
+            1 for f in SmartAddressParser._CONFIDENCE_FIELDS
             if getattr(result, f, None)
         )
 
