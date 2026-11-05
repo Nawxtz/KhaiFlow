@@ -90,6 +90,7 @@ ABBREV_EXPAND: List[Tuple[str, str]] = [
     # requires the next character NOT be Thai/Latin — ฯ and ม both are.
     (rf"{_NLB}กรุงเทพ{_NLA}",     "กรุงเทพมหานคร"),
     (rf"{_NLB}โคราช{_NLA}",       "นครราชสีมา"),
+    (rf"{_NLB}จ\.\s*ชม\.?{_NLA}", "จังหวัดเชียงใหม่"),
     (rf"{_NLB}แปดริ้ว{_NLA}",     "ฉะเชิงเทรา"),
 
     # 3. Geo-prefix abbreviations (after rank expansion to avoid collisions)
