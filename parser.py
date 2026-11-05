@@ -708,6 +708,7 @@ class SmartAddressParser:
             if pattern.search(text):
                 tags.append(tag)
         text = COURIER_STRIP_RE.sub(" ", text)
+        text = re.sub(r"(?<!\S)(?:จัด)?ส่งไว(?:ๆ|มาก|หน่อย|ด้วย|นะ(?:คะ|ครับ)?|ค่ะ|ครับ|คะ)*(?!\S)", " ", text)
         return list(dict.fromkeys(tags)), text
 
     def _extract_receiver_and_address(
