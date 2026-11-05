@@ -522,8 +522,29 @@ class SmartAddressParser:
                             result.warnings.append(f"[FuzzyCorrection] ตำบล: '{m.group(1)}' → '{match}' ({score}%)")
                             text = re.sub(r"\s+", " ", re.sub(r"(?:ตำบล|แขวง)\s*" + re.escape(m.group(1)), " ", text)).strip()
 
+        if result.district:
+            text = re.sub(r"(?<![\u0E00-\u0E7F\w])อำเภอ\s*เมือง(?![\u0E00-\u0E7F\w])", " ", text)
+        if result.province:
+            toks = text.split()
+            if toks and self._is_province_short(toks[-1], result.province):
+                if len(toks) < 2 or toks[-2] not in (
+                    "ซอย", "ซ.", "ถนน", "ถ.", "หมู่บ้าน", "มบ.", "อาคาร", "ตึก", "คอนโด", "ห้อง", "ชั้น", "โครงการ"
+                ):
+                    toks.pop()
+                    if toks and toks[-1] in ("จังหวัด", "จ.", "จ"):
+                        toks.pop()
+                    text = " ".join(toks)
         result.tags, text = self._extract_tags(text)
         result.receiver, result.address_detail = self._extract_receiver_and_address(text)
+        if result.address_detail and result.province:
+            toks = result.address_detail.split()
+            if toks and self._is_province_short(toks[-1], result.province):
+                if len(toks) < 2 or toks[-2] not in (
+                    "ซอย", "ซ.", "ถนน", "ถ.", "หมู่บ้าน", "มบ.", "อาคาร", "ตึก", "คอนโด", "ห้อง", "ชั้น", "โครงการ"
+                ):
+                    detail = " ".join(toks[:-1]).strip(" ,.-/")
+                    detail = re.sub(r"\s+(?:จังหวัด|จ\.?)$", "", detail).strip(" ,.-/")
+                    result.address_detail = detail or None
         return result
 
     # ── Step helpers ──────────────────────────────────────────────────────────
@@ -655,11 +676,14 @@ class SmartAddressParser:
         text = re.sub(r'(\d)([\u0E00-\u0E7F])', r'\1 \2', text)
         # "เขตคลองเตยกทม.10110" / "…กรุงเทพฯ10110": split glued Bangkok short names
         text = re.sub(r"([\u0E00-\u0E7F])(กทม\.|กรุงเทพฯ)", r"\1 \2", text)
+        text = re.sub(r'(?:(?<=[^\u0E00-\u0E7F\w])|^)(?:จ\.\s*)?ช\.?ม\.?\s*(?=\d{5})', 'จ.ชม. ', text)
         # Inject space before geo abbreviation prefixes glued to previous Thai word
         # "บางโฉลงอ.บางพลีจ.สมุทรปราการ" → "บางโฉลง อ.บางพลี จ.สมุทรปราการ"
         text = re.sub(r'([\u0E00-\u0E7F])(?<!กท)(?<!(?<![\u0E00-\u0E7F])อบ)(?<!\.ส)(?!(?<=(?<![\u0E00-\u0E7F])อส)ม\.)(ม\.|[ตอจซถ]\.)', r'\1 \2', text)
         # "จ.ชม." (Chiang Mai): undo the split of its trailing "ม."
         text = re.sub(r'(จ\.[ชน]) (ม\.)', r'\1\2', text)
+        text = re.sub(r'(?:(?<=[^\u0E00-\u0E7F\w])|^)จ\.\s*(?!ส\.[อตท])([ก-๙])\.\s*([ก-๙])(?:\.|\b(?=[\s\d]|$))(?:\s*([ก-๙])(?:\.|\b(?=[\s\d]|$)))?', lambda m: f'จ.{m.group(1)}{m.group(2)}{m.group(3) or ""}. ', text)
+        text = re.sub(r'(?:(?<=[^\u0E00-\u0E7F\w])|^)([ก-๙])\.\s*([ก-๙])(?:\.|\b(?=[\s\d]|$))(?:\s*([ก-๙])(?:\.|\b(?=[\s\d]|$)))?\s*(?=\d{5})', lambda m: f'{m.group(1)}{m.group(2)}{m.group(3) or ""}. ', text)
         # Normalise decomposed Thai sara-am (ํา → ำ) from some keyboards/copy-paste
         # U+0E4D U+0E32  → U+0E33  (affects ตำ อำ จำ etc.)
         text = text.replace('\u0e4d\u0e32', '\u0e33')
@@ -804,7 +828,7 @@ class SmartAddressParser:
         # "เมืองเชียงใหม่" is stripped as a unit).  Only strip when surrounded
         # by whitespace/boundary to avoid clipping legitimate place-name parts.
         if getattr(rec, "district", None) and rec.district.startswith("เมือง"):
-            text = re.sub(r"(?<!\S)อำเภอ\s*เมือง(?!\S)", " ", text)
+            text = re.sub(r"(?<![\u0E00-\u0E7F\w])อำเภอ\s*เมือง(?![\u0E00-\u0E7F\w])", " ", text)
         def _abbr_of(m, name):
             s = m.group(2).rstrip("ฯ.").replace("์", "")
             it = iter(name or "")
@@ -1012,7 +1036,7 @@ class SmartAddressParser:
                         text = remaining[:tail_m.start(1)].rstrip()
 
         text = re.sub(r"\s+", " ", text).strip()
-        address_detail = self._clean_address_detail(text.strip(" ,.-")) or None
+        address_detail = self._clean_address_detail(text.strip(" ,.-/")) or None
 
         receiver = receiver.strip() if receiver else None
         if receiver and not any(c.isalnum() for c in receiver):
@@ -1026,6 +1050,40 @@ class SmartAddressParser:
         )
 
     @staticmethod
+    def _is_province_short(tok: str, prov: str) -> bool:
+        if not tok or not prov:
+            return False
+        if tok.startswith("จังหวัด"):
+            tok = tok[7:]
+        elif tok.startswith("จ."):
+            tok = tok[2:]
+        elif tok.startswith("จ") and len(tok) > 2 and tok[1] in (" ", "."):
+            tok = tok[1:].lstrip(" .")
+        if tok.endswith("ฯ"):
+            base = tok[:-1].replace("์", "")
+            return len(base) >= 2 and all(ch in iter(prov) for ch in base)
+        clean = tok.replace(".", "").replace("์", "")
+        if tok.endswith("."):
+            return len(clean) >= 2 and all(ch in iter(prov) for ch in clean)
+        if len(clean) == 2 and all(ch in iter(prov) for ch in clean):
+            return True
+        for suffix in ("ธานี", "บุรี", "ราชธานี", "มหานคร", "ธรรมราช", "นคร"):
+            if prov.endswith(suffix):
+                base = prov[:-len(suffix)].replace("์", "")
+                if clean == base:
+                    return True
+        if prov.startswith("พระนครศรี"):
+            base = prov[9:].replace("์", "")
+            if clean == base:
+                return True
+        aliases = {
+            "นครราชสีมา": ("โคราช",),
+            "ฉะเชิงเทรา": ("แปดริ้ว",),
+            "กรุงเทพมหานคร": ("กทม", "กรุงเทพ"),
+        }
+        return prov in aliases and clean in aliases[prov]
+
+    @staticmethod
     def _clean_address_detail(text: Optional[str]) -> Optional[str]:
         if not text:
             return None
@@ -1034,6 +1092,7 @@ class SmartAddressParser:
             t = p.sub(" ", t)
         # Strip isolated stray vowels / tone marks at word boundaries or ends
         t = re.sub(r"(?:^|\s)[\u0E30-\u0E39\u0E47-\u0E4E]+(?=\s|$)", " ", t)
+        t = re.sub(r"(?<!\S)ฯ+(?!\S)", " ", t)
         t = re.sub(r"(?:^|\s)หมู่\s*$", " ", t)
 
         # Remove empty or unpaired bracket leftovers
@@ -1056,7 +1115,8 @@ class SmartAddressParser:
         if _unpaired:
             t = "".join(c for idx, c in enumerate(t) if idx not in _unpaired)
 
-        t = re.sub(r"\s+", " ", t).strip(" ,.-")
+        t = re.sub(r"([,/])(?:\s*[,/])+", r"\1", t)
+        t = re.sub(r"\s+", " ", t).strip(" ,.-/")
         if t in ("ช่วย", "ส่ง", "จัดส่ง", "รบกวน", "ฝาก", "ที่", "แถว", "ช่วยส่งให้", "ส่งให้", "ค่ะ", "ครับ", "นะคะ"):
             return None
         if len(t) < 2 and not t.isdigit():
