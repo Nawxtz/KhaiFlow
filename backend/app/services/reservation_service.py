@@ -224,45 +224,6 @@ def reserve_order_stock(
     return order
 
 
-def release_stock(
-    db: Session,
-    sku: str,
-    qty: int,
-    order_id: str | None = None,
-    shop_id: str | None = None,
-) -> bool:
-    """
-    Atomically release reserved stock:
-    UPDATE inventory SET reserved = reserved - :qty, version = version + 1
-    WHERE sku = :sku AND reserved >= :qty
-    """
-    if qty <= 0:
-        return True
-
-    reverse_stmt = text(
-        """
-        UPDATE inventory
-        SET reserved = reserved - :qty, version = version + 1
-        WHERE sku = :sku
-          AND reserved >= :qty
-        """
-    )
-    result = cast(CursorResult[Any], db.execute(reverse_stmt, {"sku": sku, "qty": qty}))
-
-    if order_id:
-        # Mark reservation records as RELEASED
-        reservations_stmt = select(Reservation).where(
-            Reservation.order_id == order_id,
-            Reservation.sku == sku,
-            Reservation.state == "RESERVED",
-        )
-        for res in db.execute(reservations_stmt).scalars().all():
-            res.state = "RELEASED"
-
-    db.commit()
-    return result.rowcount == 1
-
-
 def expire_stale_reservations(
     db: Session,
     now_fn: Callable[[], datetime] | None = None,
