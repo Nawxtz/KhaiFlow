@@ -194,7 +194,7 @@ _DETAIL_NOISE_RES: List[re.Pattern] = [
         r"ขอส่งเร็ว(?:ที่สุด)?",
         r"รีบส่ง(?:ให้หน่อย|นะคะ|นะ|ด้วย)?",
         r"ถ้าเป็นไปได้ขอ[^\s]*",
-        r"(?:ถึงก่อน|ถึงภายใน|ก่อนวัน|ภายในวัน|ในงาน|วันเสาร์|วันอาทิตย์|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัส|วันศุกร์|วันพรุ่งนี้|วันนี้|พรุ่งนี้)[^\s]*",
+        r"(?:ถึงก่อน|ถึงภายใน|ก่อนวัน|ภายในวัน|ในงาน|วันพรุ่งนี้|วันนี้|พรุ่งนี้)[^\s]*|(?<!ไม่รับ)(?<!ส่ง)(?:วันเสาร์|วันอาทิตย์|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัส|วันศุกร์)[^\s]*|(?:ส่ง)?(?:วันเสาร์|วันอาทิตย์|วันจันทร์|วันอังคาร|วันพุธ|วันพฤหัส|วันศุกร์)[^\s]+",
         r"(?:จัด)?ส่ง(?:ให้)?(?:เร็ว|ด่วน)[^\s]*",
         r"(?:เร็ว|ด่วน)(?:ที่สุด|มาก|ๆ)?",
         r"(?:จัด)?ภายใน[^\s]*",
@@ -237,7 +237,7 @@ _DETAIL_NOISE_RES: List[re.Pattern] = [
         r"ของไม่แตก(?:ครับ|ค่ะ)?",
         r"มี(?:สุนัข|หมา)ดุ(?:ระวัง)?(?:ด้วย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
         r"ไม่มีคำสั่งพิเศษ(?:ครับ|ค่ะ)?",
-        r"วางไว้หน้า(?:บ้าน|ประตู|ห้อง)(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ|จ้ะ|จ้า))?",
+        r"(?<!ไม่อยู่บ้าน)วางไว้หน้า(?:บ้าน|ประตู|ห้อง)(?:ได้)?(?:เลย)?(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ|จ้ะ|จ้า))?",
         r"ไม่ต้อง\s*(?:ติด)?\s*แท็ก(?:ครับ|ค่ะ)?",
         r"ไม่ต้องรีบ(?:นะคะ|นะ|ครับ|ค่ะ)?",
         r"(?:ไม่ต้อง|อย่า)\s*กดกริ่ง(?:\s*(?:นะคะ|นะ|ครับ|ค่ะ))?",
@@ -542,6 +542,8 @@ class SmartAddressParser:
             text = " ".join(toks)
         result.tags, text = self._extract_tags(text)
         result.receiver, result.address_detail = self._extract_receiver_and_address(text)
+        if result.address_detail and re.search(r"(?<!\d)\d{5}\s+ส่งที่ทำงาน", normalised_text):
+            result.address_detail = re.sub(r"(?:^|(?<=\s))ทำงาน$", "ส่งที่ทำงาน", result.address_detail)
         if result.address_detail and (result.province or result.district):
             toks = result.address_detail.split()
             while toks and ((result.province and self._is_province_short(toks[-1], result.province)) or self._is_geo_truncated(toks[-1], result.district, result.province)):
@@ -658,6 +660,8 @@ class SmartAddressParser:
         if not isinstance(text, str) or not text.strip():
             raise ValueError("Input must be a non-empty string")
         text = unicodedata.normalize("NFC", text)
+        # two sara e in a row is never valid Thai (doubled key press): read as sara ae
+        text = text.replace("เเ", "แ")
         # Drop Unicode pictographs (So/Sk) and variation selectors
         text = "".join(
             " " if unicodedata.category(c) in ("So", "Sk")
@@ -886,7 +890,13 @@ class SmartAddressParser:
         text = _strip_greeting_lead(text)
         text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?\s*เลย(?:\s*(?:นะคะ|นะค่ะ|นะ|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
         text = re.sub(r'(?:^|\s)ขอบคุณมาก(?:ๆ)?(?:\s*(?:นะคะ|นะค่ะ|นะครับ|นะ|ครับผม|ครับ|คับ|ค่ะ|คะ|ค่า|จ้า|จ้ะ))?(?=\s|$)', ' ', text)
-        text = CONNECTOR_PATTERN.sub(" ", text)
+        text = CONNECTOR_PATTERN.sub(
+            lambda m: m.group(0)
+            if m.group(0) == "ส่ง"
+            and re.match(r"วัน(?:เสาร์|อาทิตย์|จันทร์|อังคาร|พุธ|พฤหัส|ศุกร์)(?!เท่านั้น)", text[m.end():])
+            else " ",
+            text,
+        )
         text = re.sub(r"\b(ด้วยนะ|หน่อยนะ|ด้วย)\b", " ", text)
         text = re.sub(r'[ก-๙A-Za-z_]+\s*:\s*', ' ', text)  # FIX-R1 orphan labels
         text = re.sub(r'(?:ขอบคุณมาก(?:ๆ)?(?:\s*พี่)|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?\s*(?:คุณ)?พี่|ขอบคุณมากๆ|ขอบคุณนะ|ขอบคุณ(?:ค่ะ|ค่า|คะ|ครับ|คับ)?|รีบส่งนะ|รีบส่ง|รีบนะ|รีบ)(?:\s|$)', ' ', text)
