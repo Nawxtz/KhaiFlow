@@ -674,8 +674,11 @@ class SmartAddressParser:
 
     @staticmethod
     def _strip_geo_tokens(text: str, rec) -> str:
-        for prefix_pat, bare_pat in get_geo_strip_patterns(rec):
+        for _i, (prefix_pat, bare_pat) in enumerate(get_geo_strip_patterns(rec)):
+            _typed_pfx = _i == 0 and bool(rec.sub_district) and bool(re.search(r"(?:ต\.|ตำบล|แขวง)\s*" + re.escape(rec.sub_district) + r"(?![\u0E00-\u0E7F])", text))
             text = prefix_pat.sub(" ", text)
+            if _typed_pfx:
+                continue
             text = bare_pat.sub(" ", text)
         text = re.sub(ZIPCODE_RE, " ", text)
         # FIX [P-F2]: Remove orphaned geo-prefix stubs left when district name
