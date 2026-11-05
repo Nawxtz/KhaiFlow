@@ -258,7 +258,7 @@ class GeoDatabase:
                     while idx != -1:
                         end_idx = idx + tlen
                         before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                        if before_ok and check_after(end_idx, _DIST_PFXS + prov_prefixes):
+                        if before_ok and not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ.")) and check_after(end_idx, _DIST_PFXS + prov_prefixes):
                             if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
                                 m.append((idx, end_idx, False, tlen))
                         idx = text.find(sub, idx + 1)
@@ -703,6 +703,11 @@ class FuzzyGeoMatcher:
             if stripped in receiver_tokens or len(stripped) < 2:
                 continue
             if pfx_type is None and stripped in ("หมู่", "หมู่ที่", "หมู่บ้าน", "ซอย", "ถนน", "ตรอก"):
+                continue
+            if pfx_type is None and (
+                stripped.startswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ."))
+                or re.search(r"(?:ถนน|ซอย|ตรอก|ถ\.|ซ\.)\s*" + re.escape(stripped), text)
+            ):
                 continue
 
             if (stripped in used_dist_prov or token in used_dist_prov) and pfx_type != "sub":
