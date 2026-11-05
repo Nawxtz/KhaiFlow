@@ -69,11 +69,31 @@ _PARSER_INSTANCE: Any = None
 _ZIPCODE_TO_PROVINCES: dict[str, set[str]] = {}
 PARSER_DEGRADED: bool = False
 
+_ROOT_CANDIDATES = (
+    Path(__file__).resolve().parent.parent.parent,
+    Path(__file__).resolve().parent.parent.parent.parent,
+)
+
 
 def set_parser(parser: Any) -> None:
     """Override parser (used for test mocks)."""
     global _PARSER_INSTANCE
     _PARSER_INSTANCE = parser
+
+
+def _add_zipcode_cache_row(row: Any, province: str | None = None) -> None:
+    """Cache valid province for a zipcode from a GeoRecord or CSV row dict."""
+    if province is not None:
+        z = str(row).strip()
+        p = province.strip()
+    elif isinstance(row, dict):
+        z = row.get("zipcode", "").strip()
+        p = row.get("province", "").strip()
+    else:
+        z = getattr(row, "zipcode", "").strip()
+        p = getattr(row, "province", "").strip()
+    if z and p:
+        _ZIPCODE_TO_PROVINCES.setdefault(z, set()).add(p)
 
 
 def get_parser() -> Any:
@@ -86,11 +106,7 @@ def get_parser() -> Any:
         return _PARSER_INSTANCE
 
     # Attempt to load ThaiSmartAddress v7.0 parser from backend or repo root
-    candidates = [
-        Path(__file__).resolve().parent.parent.parent,
-        Path(__file__).resolve().parent.parent.parent.parent,
-    ]
-    for d in candidates:
+    for d in _ROOT_CANDIDATES:
         if str(d) not in sys.path and d.exists():
             sys.path.insert(0, str(d))
 
@@ -115,30 +131,21 @@ def get_parser() -> Any:
 
 def _load_zipcode_cache(geo_db: Any) -> None:
     """Cache mapping from zipcode to valid provinces for fast contradiction checking."""
-    global _ZIPCODE_TO_PROVINCES
     if hasattr(geo_db, "_all_records"):
         for record in geo_db._all_records:
-            zipcode = getattr(record, "zipcode", "").strip()
-            province = getattr(record, "province", "").strip()
-            if zipcode and province:
-                _ZIPCODE_TO_PROVINCES.setdefault(zipcode, set()).add(province)
+            _add_zipcode_cache_row(record)
 
 
 def _find_csv_path() -> Path | None:
     """Locate the canonical address CSV under the backend or repo root."""
-    candidates = [
-        Path(__file__).resolve().parent.parent.parent,
-        Path(__file__).resolve().parent.parent.parent.parent,
-    ]
     return next(
-        (d / "data" / "thai_address_full.csv" for d in candidates if (d / "data" / "thai_address_full.csv").exists()),
+        (d / "data" / "thai_address_full.csv" for d in _ROOT_CANDIDATES if (d / "data" / "thai_address_full.csv").exists()),
         None,
     )
 
 
 def _ensure_zipcode_cache() -> None:
     """Ensure zipcode to province lookup table is populated from canonical CSV."""
-    global _ZIPCODE_TO_PROVINCES
     if _ZIPCODE_TO_PROVINCES:
         return
     csv_path = _find_csv_path()
@@ -148,10 +155,7 @@ def _ensure_zipcode_cache() -> None:
         with open(csv_path, encoding="utf-8") as f:
             reader = csv.DictReader(f)
             for row in reader:
-                z = row.get("zipcode", "").strip()
-                p = row.get("province", "").strip()
-                if z and p:
-                    _ZIPCODE_TO_PROVINCES.setdefault(z, set()).add(p)
+                _add_zipcode_cache_row(row)
 
 
 def check_contradiction(postcode: str | None, province: str | None) -> dict[str, str] | None:
