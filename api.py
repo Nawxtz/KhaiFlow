@@ -8,7 +8,6 @@ Endpoints:
     POST /api/parse            — Parse a raw Thai address string
     POST /api/parse/batch      — Parse a list of addresses (up to 100)
     POST /api/feedback         — Log a human correction (HITL Data Flywheel)
-    GET  /api/corrections      — List recent corrections (admin, auth required)
     GET  /api/health           — Liveness / readiness probe
     GET  /api/info             — Server metadata (auth required when API_KEY set)
 
@@ -103,6 +102,7 @@ from geo_engine import GeoDatabase, RAPIDFUZZ_AVAILABLE
 # Falls back to plain-text gracefully so the app starts without the package.
 # ══════════════════════════════════════════════════════════════════════════════
 
+_VERSION = "7.0.0"
 _LOG_LEVEL = os.getenv("LOG_LEVEL", "info").upper()
 
 try:
@@ -383,7 +383,7 @@ app = FastAPI(
         "**Pipeline:** Intent Shield → Keyboard Fallback → Rule-Based → "
         "Fuzzy Geo (RapidFuzz) → NER (PyThaiNLP) → Strict Validation"
     ),
-    version="7.0.0",
+    version=_VERSION,
     lifespan=lifespan,
     default_response_class=ORJSONResponse,
     docs_url="/docs",
@@ -519,8 +519,8 @@ class BatchParseRequest(BaseModel):
     def validate_texts(cls, v: List[str]) -> List[str]:
         if any(len(t) > 2001 or len(t.replace(" ", "")) > 2000 for t in v):
             raise ValueError("each text must not exceed 2000 characters")
-        cleaned = [t.strip() for t in v if t.strip()]
-        if not cleaned:
+        cleaned = [t.strip() for t in v]
+        if not any(cleaned):
             raise ValueError("texts list must contain at least one non-blank string")
         return cleaned
 
@@ -581,14 +581,9 @@ class FeedbackResponse(BaseModel):
     message:         str = "Correction logged successfully"
 
 
-class CorrectionListResponse(BaseModel):
-    total:       int
-    corrections: List[Dict[str, Any]]
-
-
 class HealthResponse(BaseModel):
     status:          str   = "ok"
-    version:         str   = "7.0.0"
+    version:         str   = _VERSION
     geo_records:     int
     uptime_s:        float
     # FIX [#25]: expose NER and fuzzy degradation state for ops alerting
@@ -710,14 +705,6 @@ async def submit_feedback(body: FeedbackRequest, request: Request) -> FeedbackRe
     )
 
 
-async def list_corrections(request: Request, limit: int = 50) -> CorrectionListResponse:
-    db_adapter: SQLiteFeedbackStore = request.app.state.db_adapter
-    # FIX [FIX-A3]: clamp both sides — min(-1, 500) = -1 would pass -1 to SQLAlchemy
-    capped = max(1, min(limit, 500))
-    total, corrections = await _run_in_executor(request, db_adapter.count_and_recent, capped)
-    return CorrectionListResponse(total=total, corrections=corrections)
-
-
 @app.get("/api/health", response_model=HealthResponse, tags=["Operations"])
 async def health_check(request: Request) -> HealthResponse:
     uptime = (datetime.now(timezone.utc) - request.app.state.start_time).total_seconds()
@@ -744,7 +731,7 @@ async def health_check(request: Request) -> HealthResponse:
 async def server_info(request: Request) -> InfoResponse:
     uptime = (datetime.now(timezone.utc) - request.app.state.start_time).total_seconds()
     return InfoResponse(
-        version="7.0.0",
+        version=_VERSION,
         geo_records=request.app.state.geo_db.size,
         start_time=request.app.state.start_time.isoformat(),
         uptime_s=round(uptime, 1),

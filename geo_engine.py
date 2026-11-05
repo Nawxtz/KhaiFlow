@@ -123,8 +123,24 @@ class GeoDatabase:
         self._sub_map:  Dict[str, List[GeoRecord]] = defaultdict(list)
         self._dist_map: Dict[str, List[GeoRecord]] = defaultdict(list)
         self._prov_map: Dict[str, List[GeoRecord]] = defaultdict(list)
+        self._sub_by_pfx: Dict[str, List[Tuple[str, List[GeoRecord]]]] = defaultdict(list)
+        self._dist_by_pfx: Dict[str, List[Tuple[str, List[GeoRecord]]]] = defaultdict(list)
+        self._prov_by_pfx: Dict[str, List[Tuple[str, List[GeoRecord]]]] = defaultdict(list)
+        self._pfx_indexed = False
         self._all_records: List[GeoRecord] = []
         self._loaded = False
+
+    def _build_prefix_indices(self) -> None:
+        self._sub_by_pfx = defaultdict(list)
+        for sub, recs in self._sub_map.items():
+            self._sub_by_pfx[sub[:2]].append((sub, recs))
+        self._dist_by_pfx = defaultdict(list)
+        for dist, recs in self._dist_map.items():
+            self._dist_by_pfx[dist[:2]].append((dist, recs))
+        self._prov_by_pfx = defaultdict(list)
+        for prov, recs in self._prov_map.items():
+            self._prov_by_pfx[prov[:2]].append((prov, recs))
+        self._pfx_indexed = True
 
     # ── Loaders ───────────────────────────────────────────────────────────────
 
@@ -143,6 +159,7 @@ class GeoDatabase:
         for row in reader:
             self._ingest(row)
         self._loaded = True
+        self._build_prefix_indices()
         logger.info("GeoDatabase loaded: %d records", len(self._all_records))
         return self
 
@@ -442,6 +459,9 @@ class GeoDatabase:
             self._prov_tuple = tuple(self._prov_map.keys())
         prov_prefixes = prov_pfxs + self._prov_tuple
 
+        if not getattr(self, "_pfx_indexed", False):
+            self._build_prefix_indices()
+
         def _pfx_match(name: str, pfxs: tuple, follow_pfxs: tuple = ()) -> bool:
             for p in pfxs:
                 full = p + name
@@ -466,12 +486,15 @@ class GeoDatabase:
                         seen.add(r)
                         pool.append(r)
 
-        for sub, recs in self._sub_map.items():
-            _add_if_match(sub, recs, sub_pfxs, dist_pfxs + prov_prefixes)
-        for dist, recs in self._dist_map.items():
-            _add_if_match(dist, recs, dist_pfxs, prov_prefixes)
-        for prov, recs in self._prov_map.items():
-            _add_if_match(prov, recs, prov_pfxs)
+        if len(text) >= 2:
+            pfxs = {text[i : i + 2] for i in range(len(text) - 1)}
+            for pfx in pfxs:
+                for sub, recs in self._sub_by_pfx.get(pfx, ()):
+                    _add_if_match(sub, recs, sub_pfxs, dist_pfxs + prov_prefixes)
+                for dist, recs in self._dist_by_pfx.get(pfx, ()):
+                    _add_if_match(dist, recs, dist_pfxs, prov_prefixes)
+                for prov, recs in self._prov_by_pfx.get(pfx, ()):
+                    _add_if_match(prov, recs, prov_pfxs)
 
         return pool
 

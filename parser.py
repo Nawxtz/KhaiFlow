@@ -448,10 +448,14 @@ class SmartAddressParser:
         return out
 
     def _has_geo_signal(self, seg: str) -> bool:
+        if not seg or not seg.strip():
+            return False
         if self._MULTI_GEO_RE.search(seg):
             return True
-        rec, _, _ = self._geo.lookup(seg)
-        return rec is not None
+        _SUB_PFXS = ("ตำบล", "แขวง", "ต.", "แขวง ", "ต ")
+        _DIST_PFXS = ("อำเภอ", "เขต", "อ.", "เขต ", "ที่", "อ ")
+        _PROV_PFXS = ("จังหวัด", "จ.", "ที่", "จ ", "แถว")
+        return bool(self._geo._build_candidate_pool(seg, _SUB_PFXS, _DIST_PFXS, _PROV_PFXS))
 
     def _split_multi_address(self, raw_text: str, normalised: str) -> Tuple[str, bool]:
         num_m = re.search(r"(?:^|\s)1[.)]\s+(.+?)\s+2[.)]\s+(.+)$", normalised)
@@ -620,10 +624,13 @@ class SmartAddressParser:
         text = re.sub(r"([฀-๿])\.$", r"\1", text)
         text = re.sub(r"\s+", " ", text).strip()
         tokens = text.split()
-        if len(tokens) >= 8 and len(tokens) % 2 == 0:
-            half = len(tokens) // 2
-            if tokens[:half] == tokens[half:]:
-                return " ".join(tokens[:half])
+        n = len(tokens)
+        if n >= 8:
+            for p in range(4, n // 2 + 1):
+                if n % p == 0:
+                    k = n // p
+                    if tokens == tokens[:p] * k:
+                        return " ".join(tokens[:p])
         return text
 
     def _extract_phone(self, text: str) -> Tuple[Optional[str], str]:
@@ -911,8 +918,14 @@ class SmartAddressParser:
         text = re.sub(r"\s+", " ", text).strip()
         address_detail = self._clean_address_detail(text.strip(" ,.-")) or None
 
+        receiver = receiver.strip() if receiver else None
+        if receiver and not any(c.isalnum() for c in receiver):
+            receiver = None
+        if address_detail and not any(c.isalnum() for c in address_detail):
+            address_detail = None
+
         return (
-            receiver.strip() if receiver else None,
+            receiver,
             address_detail,
         )
 
@@ -1127,6 +1140,11 @@ class SmartAddressParser:
 
     @staticmethod
     def _strict_validate(result: ParseResult) -> ParseResult:
+        if result.receiver and not any(c.isalnum() for c in result.receiver):
+            result.receiver = None
+        if result.address_detail and not any(c.isalnum() for c in result.address_detail):
+            result.address_detail = None
+
         receiver_val  = result.receiver or ""
         receiver_bare = re.sub(r"[^฀-๿a-zA-Z]", "", receiver_val)
         receiver_garbage = bool(receiver_val) and len(receiver_bare) < 2
