@@ -943,24 +943,21 @@ class SmartAddressParser:
                 ):
                     continue
 
-                after_text = text[end_idx:]
-                second_m   = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", after_text)
-
-                if second_m:
+                receiver = clean_span
+                for _ in range(2 if hm.group("n") == "หญิง" else 1):
+                    second_m = re.match(r"\s*([^\s\d/]{2,30})(?=\s|$)", text[end_idx:])
+                    if not second_m:
+                        break
                     candidate = second_m.group(1)
-                    is_stop   = (
+                    if (
                         self._is_name_stop(candidate)
                         or candidate.startswith("ที่")
                         or candidate in ("ก่อน", "เดิม")
                         or candidate.startswith("ขอเบิก")
-                    )
-                    if not is_stop:
-                        receiver  = f"{clean_span} {candidate}".strip()
-                        end_idx  += second_m.end()
-                    else:
-                        receiver  = clean_span
-                else:
-                    receiver = clean_span
+                    ):
+                        break
+                    receiver = f"{receiver} {candidate}".strip()
+                    end_idx += second_m.end()
 
                 if receiver:
                     text = text[:start_idx] + " " + text[end_idx:]
