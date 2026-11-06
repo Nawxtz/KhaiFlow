@@ -968,9 +968,11 @@ class SmartAddressParser:
             _pre = ADDRESS_DETAIL_RE.search(text)
             if _pre and _pre.start() > 0 and not (
                 text.startswith(" ")
+                and text[_pre.start() - 1] == " "
                 and " " in receiver
                 and not re.search(r"[A-Za-z]", receiver)
-                and re.fullmatch(r"[A-Za-z]+(?:\s+[A-Za-z]+)*", text[: _pre.start()].strip())
+                and "ร้าน" not in text[: _pre.start()]
+                and re.fullmatch(r"[ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)*", text[: _pre.start()].strip())
             ):
                 text = text[_pre.start():].strip()
         # Pass B: house-number anchor
@@ -1026,7 +1028,7 @@ class SmartAddressParser:
         # within the first 40 chars, so landmark addresses ("ร้านกาแฟหน้าปากซอย 2")
         # are NOT destroyed.
         _CO_RE = re.compile(r'(?:^|\s)(?:บจก|บริษัท|ห้างหุ้นส่วน|หจก|บ\.)\b', re.IGNORECASE)
-        if receiver is not None and _CO_RE.search(text[:40]):
+        if receiver is not None and not (text.startswith(" ") and " " in receiver) and _CO_RE.search(text[:40]):
             _stripped = re.sub(r'^.*?(?=\d|(?:อาคาร|ตึก|คอนโด|ห้อง|ชั้น))', '', text, count=1, flags=re.DOTALL).strip()
             if _stripped and _stripped != text:
                 text = _stripped
