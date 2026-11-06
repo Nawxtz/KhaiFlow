@@ -355,6 +355,17 @@ class SmartAddressParser:
             )
             return result
 
+        m_aj = re.match(r"^อำเภอ([ก-๙]+)", normalised)
+        if m_aj:
+            w = m_aj.group(1)
+            if not (
+                w.startswith("เมือง")
+                or w in self._geo._dist_map
+                or correct_typo(w, self._fuzzy._near_len(w, self._fuzzy._dist_by_len), self._fuzzy_threshold)[0]
+            ):
+                m_raw = re.match(r"^\s*(อ\.\s*)", text)
+                normalised = (m_raw.group(1) if m_raw else "อ.") + normalised[5:]
+
         normalised, is_multi = self._split_multi_address(text, normalised)
 
         # Phase A: Rule-Based Core (receives pre-normalised text)
@@ -680,6 +691,8 @@ class SmartAddressParser:
         text = re.sub(r"[\n\r\t]+", " ", text)
         # "(081)2345678" / "(02)1234567": drop the parentheses around a phone prefix
         text = re.sub(r"\((0\d{1,2})\)\s*(?=\d)", r"\1", text)
+        text = re.sub(r"\(\s*\+?66\s*\)\s*(?=\d)", "+66", text)
+        text = re.sub(r"\+66\s*\(0\)\s*", "+66", text)
         def _replace_o_zipcode(m: re.Match) -> str:
             tok = m.group(1)
             if sum(1 for c in tok if c.isdigit()) >= 3 and any(c in "Oo" for c in tok):
