@@ -275,7 +275,7 @@ class GeoDatabase:
             while idx != -1:
                 end_idx = idx + tlen
                 before_ok = (idx == 0) or not ('\u0E00' <= text[idx - 1] <= '\u0E7F')
-                if before_ok and (pfxs is not SUB_PFXS or not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ."))) and check_after(end_idx, follow):
+                if before_ok and (pfxs is not SUB_PFXS or (not name.startswith(("ถนน", "ซอย", "ตรอก")) and not text[:idx].rstrip().endswith(("ถนน", "ซอย", "ตรอก", "ถ.", "ซ.")))) and check_after(end_idx, follow):
                     if not any(s <= idx and end_idx <= e for s, e, _, _ in m):
                         m.append((idx, end_idx, False, tlen))
                 idx = text.find(name, idx + 1)
@@ -383,6 +383,8 @@ class GeoDatabase:
                 )
 
         out_rec: Optional[GeoRecord] = best_rec
+        if out_rec and best_key[2] == 0:
+            out_rec = GeoRecord(sub_district="", district=out_rec.district, province=out_rec.province, zipcode=out_rec.zipcode)
         if out_rec and out_rec.sub_district:
             rt = _extract_receiver_tokens(text)
             if (
