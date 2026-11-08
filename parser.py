@@ -1224,7 +1224,11 @@ class SmartAddressParser:
                 return result
 
             # Only copy sub_district when fuzzy actually matched a sub_district token.
-            sub_corrected = not result.sub_district and any(c.startswith('ตำบล') and fuzzy_rec.sub_district in c for c in corrections)
+            _typed_dist = (result.district or '').strip()
+            sub_corrected = not result.sub_district and any(
+                c.startswith('ตำบล') and fuzzy_rec.sub_district in c
+                and not (_typed_dist and re.search(r"'(?:ตำบล|แขวง|ต\.)?" + re.escape(_typed_dist) + r"' →", c))
+                for c in corrections)
             if sub_corrected:
                 result.sub_district = fuzzy_rec.sub_district
             dist_corrected = not result.district and any(c.startswith('อำเภอ') and fuzzy_rec.district in c for c in corrections)
