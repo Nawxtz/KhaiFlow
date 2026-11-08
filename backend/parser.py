@@ -526,6 +526,8 @@ class SmartAddressParser:
                         match, score = correct_typo(m.group(1), subs, self._fuzzy_threshold)
                         if match != m.group(1) and sum(1 for s in subs if m.group(1) in s) > 1:
                             match = None
+                        if match and m.group(1) == result.district and m.group(1) not in match:
+                            match = None
                         recs = [r for r in zip_pool if r.sub_district == match and (not result.district or r.district == result.district)]
                         if match and recs:
                             result.sub_district = match
