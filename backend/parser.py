@@ -467,6 +467,21 @@ class SmartAddressParser:
         geo_rec, geo_score, geo_warns = self._geo.lookup(text, zipcode_hint=result.zipcode)
         result.warnings.extend(geo_warns)
 
+        if (
+            geo_rec
+            and geo_rec.sub_district
+            and geo_rec.sub_district in self._geo._prov_map
+            and geo_rec.province != geo_rec.sub_district
+            and not result.zipcode
+            and not any((p + geo_rec.sub_district) in text for p in SUB_PFXS)
+            and not any((p + geo_rec.district) in text for p in DIST_PFXS)
+            and not any((p + geo_rec.province) in text for p in PROV_PFXS)
+            and not self._geo._wb_match(geo_rec.district, text)
+            and not self._geo._wb_match(geo_rec.province, text)
+        ):
+            geo_rec = GeoRecord(sub_district="", district="", province=geo_rec.sub_district, zipcode="")
+            result.warnings = [w for w in result.warnings if not w.startswith("Geo ambiguity")]
+
         # A bare word equal to a sub-district (e.g. a surname) must not beat a district the customer typed:
         # when the record's district is not in the text, look again without that word.
         if geo_rec and geo_rec.sub_district and not self._geo._wb_match(geo_rec.district, text) and not any(
