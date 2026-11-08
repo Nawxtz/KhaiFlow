@@ -52,7 +52,7 @@ from geo_engine import (
     correct_typo,
     get_geo_strip_patterns,
 )
-from models import CorrectionRecord, NERResult, ParseResult
+from models import CorrectionRecord, GeoRecord, NERResult, ParseResult
 
 logger = logging.getLogger("ThaiSmartAddress")
 
@@ -479,11 +479,20 @@ class SmartAddressParser:
             ):
                 geo_rec, geo_score = alt_rec, alt_score
 
+        if geo_rec and geo_rec.sub_district:
+            for dm in re.finditer(r"(?:อำเภอ|เขต|อ\.)\s*([ก-๙]+)", text):
+                typed_d = dm.group(1)
+                if typed_d != geo_rec.district:
+                    d_recs = [r for r in self._geo.records_for_district(typed_d) if not geo_rec.province or r.province == geo_rec.province]
+                    if d_recs and not any(r.sub_district == geo_rec.sub_district for r in d_recs):
+                        geo_rec = GeoRecord(sub_district="", district=typed_d, province=geo_rec.province, zipcode=result.zipcode or "")
+                        break
+
         if geo_rec:
-            if self._geo._wb_match(geo_rec.sub_district, text) or any(
+            if geo_rec.sub_district and (self._geo._wb_match(geo_rec.sub_district, text) or any(
                 re.search(re.escape(pfx + geo_rec.sub_district) + r"(?![\u0E00-\u0E7F])|" + re.escape(pfx + geo_rec.sub_district) + r"(?=อ\.|อำเภอ|เขต|จ\.|จังหวัด)", text)
                 for pfx in SUB_PFXS
-            ):
+            )):
                 result.sub_district = geo_rec.sub_district
 
             if (geo_rec.district and (result.sub_district or
