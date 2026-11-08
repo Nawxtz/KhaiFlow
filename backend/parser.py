@@ -693,6 +693,7 @@ class SmartAddressParser:
         text = re.sub(r"\((0\d{1,2})\)\s*(?=\d)", r"\1", text)
         text = re.sub(r"\(\s*\+?66\s*\)\s*(?=\d)", "+66", text)
         text = re.sub(r"\+66\s*\(0\)\s*", "+66", text)
+        text = re.sub(r"(?<!\d)00\s*66\s*(?=\d)", "+66", text)
         def _replace_o_zipcode(m: re.Match) -> str:
             tok = m.group(1)
             if sum(1 for c in tok if c.isdigit()) >= 3 and any(c in "Oo" for c in tok):
@@ -954,6 +955,7 @@ class SmartAddressParser:
                         or candidate.startswith("ที่")
                         or candidate in ("ก่อน", "เดิม")
                         or candidate.startswith("ขอเบิก")
+                        or candidate.startswith(("ร้าน", "วัด", "ตลาด"))
                     ):
                         break
                     receiver = f"{receiver} {candidate}".strip()
@@ -969,9 +971,11 @@ class SmartAddressParser:
             if _pre and _pre.start() > 0 and not (
                 text.startswith(" ")
                 and text[_pre.start() - 1] == " "
-                and " " in receiver
                 and not re.search(r"[A-Za-z]", receiver)
-                and "ร้าน" not in text[: _pre.start()]
+                and (
+                    " " in receiver
+                    or text[: _pre.start()].strip().startswith(("ร้าน", "ตลาด", "วัด"))
+                )
                 and re.fullmatch(r"[ก-๙A-Za-z]+(?:\s+[ก-๙A-Za-z]+)*", text[: _pre.start()].strip())
             ):
                 text = text[_pre.start():].strip()

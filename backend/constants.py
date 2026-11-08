@@ -75,6 +75,8 @@ ABBREV_EXPAND: List[Tuple[str, str]] = [
     (rf"{_NLB}จ\.ส\.อ(?:\.|{_NLA})", "จ่าสิบเอก"),
     (rf"{_NLB}จ\.ส\.ต(?:\.|{_NLA})", "จ่าสิบตำรวจ"),
     (rf"{_NLB}ส\.ต\.อ(?:\.|{_NLA})", "สิบตำรวจเอก"),
+    (rf"{_NLB}ส\.ต\.ท(?:\.|{_NLA})", "สิบตำรวจโท"),
+    (rf"{_NLB}ส\.ต\.ต(?:\.|{_NLA})", "สิบตำรวจตรี"),
     (rf"{_NLB}ร\.ต\.อ(?:\.|{_NLA})", "ร้อยตำรวจเอก"),
     (rf"{_NLB}ร\.ต\.ท(?:\.|{_NLA})", "ร้อยตำรวจโท"),
     (rf"{_NLB}ร\.ต\.ต(?:\.|{_NLA})", "ร้อยตำรวจตรี"),
@@ -259,6 +261,7 @@ _HONORIFIC_LIST: List[str] = sorted([
     # Military & police (expanded forms — post-ABBREV_EXPAND)
     "จ่าสิบเอก", "สิบเอก", "ร้อยตำรวจตรี", "พลตำรวจตรี",
     "พันตำรวจโท", "พันตำรวจเอก", "ร้อยเอก",
+    "จ่าสิบตำรวจ", "สิบตำรวจเอก", "สิบตำรวจโท", "สิบตำรวจตรี",
 ], key=len, reverse=True)
 
 HONORIFIC_SKIP_SET: FrozenSet[str] = frozenset(_HONORIFIC_LIST)
