@@ -17,6 +17,8 @@ const contentSecurityPolicy = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // The portal uses no next/image; this turns off the optimizer behind the known Next 14 flaws.
+  images: { unoptimized: true },
   async headers() {
     return [
       {
