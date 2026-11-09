@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+LOCAL_DEV_DB_URL = "postgresql://postgres:postgres@localhost:5432/app_dev"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -12,7 +14,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/app_dev"
+    DATABASE_URL: str = LOCAL_DEV_DB_URL
 
     # Shop & Tenancy
     DEFAULT_SHOP_ID: str | None = "default"
@@ -60,6 +62,26 @@ class Settings(BaseSettings):
     # PDPA Settings (reference_settings.md & Phase 10)
     RETENTION_MONTHS: int = 12
     CONSENT_REQUIRED: bool = True
+
+
+_REQUIRED_IN_PRODUCTION = (
+    "LINE_CHANNEL_SECRET",
+    "LINE_CHANNEL_ACCESS_TOKEN",
+    "PAYMENT_QR_SECRET",
+)
+
+
+def check_runtime_settings(cfg: Settings) -> None:
+    """Stop startup on an unknown environment, or a production run with missing secrets."""
+    if cfg.APP_ENV not in ("development", "production"):
+        raise RuntimeError("APP_ENV must be 'development' or 'production'.")
+    if cfg.APP_ENV != "production":
+        return
+    missing = [name for name in _REQUIRED_IN_PRODUCTION if not getattr(cfg, name)]
+    if cfg.DATABASE_URL == LOCAL_DEV_DB_URL:
+        missing.append("DATABASE_URL")
+    if missing:
+        raise RuntimeError(f"Missing required production settings: {', '.join(missing)}")
 
 
 settings = Settings()
