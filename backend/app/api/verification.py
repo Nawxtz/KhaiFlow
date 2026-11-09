@@ -154,6 +154,7 @@ def manual_approve_endpoint(
         order = approve_manual(
             order_id=order_id,
             reviewer_id=current.username,
+            actor_user_id=current.id,
             db=db,
         )
         return ManualActionResponse(
@@ -181,6 +182,7 @@ def manual_reject_endpoint(
         order = reject_manual(
             order_id=order_id,
             reviewer_id=current.username,
+            actor_user_id=current.id,
             reason=req.reason,
             db=db,
         )

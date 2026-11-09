@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.order import Order, OrderStatus
 from app.models.payment import ConsumedPaymentClaim, Reservation
+from app.services.audit import record_audit
 
 
 class EscalationError(Exception):
@@ -80,12 +81,17 @@ def escalate_for_manual_review(
     return order
 
 
+def _order_review_state(order: Order) -> dict[str, str | None]:
+    return {"status": order.status, "approval_state": order.approval_state}
+
+
 def approve_manual(
     order_id: str,
     reviewer_id: str,
     db: Session,
     shop_id: str | None = None,
     now_fn: Callable[[], datetime] | None = None,
+    actor_user_id: int | None = None,
 ) -> Order:
     """
     Option B seller manual approval.
@@ -103,6 +109,7 @@ def approve_manual(
         raise OrderNotFoundError(f"Order '{order_id}' not found.")
 
     now_dt = get_current_time(now_fn)
+    old_value = _order_review_state(order)
     order.approval_state = "APPROVED"
     order.status = OrderStatus.PAYMENT_RECEIVED.value
     order.ttl_expires_at = None
@@ -125,6 +132,16 @@ def approve_manual(
     for res in db.execute(res_stmt).scalars().all():
         res.state = "CONFIRMED"
 
+    record_audit(
+        db,
+        actor_user_id,
+        "payment.approve",
+        "order",
+        order.id,
+        old_value,
+        _order_review_state(order),
+        shop_id=order.shop_id,
+    )
     db.commit()
     db.refresh(order)
     return order
@@ -137,6 +154,7 @@ def reject_manual(
     db: Session,
     shop_id: str | None = None,
     now_fn: Callable[[], datetime] | None = None,
+    actor_user_id: int | None = None,
 ) -> Order:
     """
     Option B seller manual rejection.
@@ -184,11 +202,22 @@ def reject_manual(
         claim.claim_key = f"RELEASED:{original_key}:{int(now_dt.timestamp())}"
         claim.state = "RELEASED"
 
+    old_value = _order_review_state(order)
     order.approval_state = "REJECTED"
     order.status = "CANCELLED"
     order.ttl_expires_at = None
     order.updated_at = now_dt
 
+    record_audit(
+        db,
+        actor_user_id,
+        "payment.reject",
+        "order",
+        order.id,
+        old_value,
+        {**_order_review_state(order), "reason": reason},
+        shop_id=order.shop_id,
+    )
     db.commit()
     db.refresh(order)
     return order

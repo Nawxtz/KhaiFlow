@@ -91,7 +91,7 @@ def test_reviewer_comes_from_the_session_not_the_body(client: TestClient, monkey
         status = "PAYMENT_RECEIVED"
         approval_state = "APPROVED"
 
-    def fake_approve(order_id: str, reviewer_id: str, db: Session) -> FakeOrder:
+    def fake_approve(order_id: str, reviewer_id: str, db: Session, **_kwargs) -> FakeOrder:
         seen["reviewer_id"] = reviewer_id
         return FakeOrder()
 
