@@ -506,7 +506,7 @@ class SmartAddressParser:
         if geo_rec and geo_rec.sub_district and geo_rec.sub_district == geo_rec.district:
             if not re.search(r"(?<![\u0E00-\u0E7F])(?:ต\.|ตำบล|แขวง|ต\s)\s*" + re.escape(geo_rec.sub_district) + r"(?![\u0E00-\u0E7F])", text):
                 dist_m = re.search(r"(?<![\u0E00-\u0E7F])(?:(?:อ\.|อำเภอ|เขต)\s*)?" + re.escape(geo_rec.district) + r"(?![\u0E00-\u0E7F])", text)
-                if dist_m and re.search(r"(?:^|[^\u0E00-\u0E7F])(?:ถนน|ถ\.|ซอย|ซ\.|ตรอก)", text[:dist_m.start()]):
+                if dist_m and len(re.findall(r"(?<![\u0E00-\u0E7F])" + re.escape(geo_rec.district) + r"(?![\u0E00-\u0E7F])", text)) < 2 and re.search(r"(?:^|[^\u0E00-\u0E7F])(?:ถนน|ถ\.|ซอย|ซ\.|ตรอก)", text[:dist_m.start()]):
                     geo_rec = GeoRecord(sub_district="", district=geo_rec.district, province=geo_rec.province, zipcode=geo_rec.zipcode)
 
         if geo_rec:
