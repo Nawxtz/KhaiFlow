@@ -62,7 +62,7 @@ async def line_webhook(
             payload_data = json.loads(body.decode("utf-8"))
             payload = LineWebhookPayload(**payload_data)
         except Exception as e:
-            logger.error("Failed to parse LINE webhook payload: %s", e)
+            logger.error("Failed to parse LINE webhook payload: %s", type(e).__name__)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Malformed webhook payload",

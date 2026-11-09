@@ -83,7 +83,7 @@ def call_openrouter(
         with httpx.Client(timeout=timeout) as client:
             resp = client.post(OPENROUTER_URL, headers=headers, json=payload)
             if resp.status_code != 200:
-                logger.warning("OpenRouter API returned HTTP %s: %s", resp.status_code, resp.text)
+                logger.warning("OpenRouter API returned HTTP %s", resp.status_code)
                 return None
             data = resp.json()
             choices = data.get("choices")
@@ -93,7 +93,7 @@ def call_openrouter(
                     return content
             return None
     except Exception as exc:
-        logger.warning("Error calling OpenRouter (%s): %s", model, exc)
+        logger.warning("Error calling OpenRouter (%s): %s", model, type(exc).__name__)
         return None
 
 
@@ -138,7 +138,7 @@ def extract_intent_llm(
         try:
             parsed_json = json.loads(raw_response)
         except Exception:
-            logger.warning("LLM returned non-JSON response: %s", raw_response)
+            logger.warning("LLM returned a non-JSON response")
             return None
 
         if not isinstance(parsed_json, dict):
@@ -148,7 +148,7 @@ def extract_intent_llm(
         try:
             intent = LLMExtractedIntent.model_validate(parsed_json)
         except Exception as exc:
-            logger.warning("LLM output schema validation failed: %s", exc)
+            logger.warning("LLM output schema validation failed: %s", type(exc).__name__)
             return None
 
         # Check confidence threshold
@@ -177,9 +177,8 @@ def extract_intent_llm(
 
         if not matched_product:
             logger.info(
-                "LLM extracted product not found in active catalog: %s / %s",
+                "LLM extracted product not found in active catalog: %s",
                 intent.sku,
-                intent.name,
             )
             return None
 
@@ -190,5 +189,5 @@ def extract_intent_llm(
         return intent
 
     except Exception as exc:
-        logger.error("Unexpected error in extract_intent_llm: %s", exc)
+        logger.error("Unexpected error in extract_intent_llm: %s", type(exc).__name__)
         return None

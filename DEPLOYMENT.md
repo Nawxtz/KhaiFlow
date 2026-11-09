@@ -116,7 +116,7 @@ Add the public backend API endpoint:
 
 | Key | Value | Description |
 |---|---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `https://<YOUR-RAILWAY-APP>.up.railway.app` | Base URL for FastAPI REST calls |
+| `BACKEND_URL` | `https://<YOUR-RAILWAY-APP>.up.railway.app` | Base URL for FastAPI REST calls, read only on the portal server |
 
 ### 4.3 Deploy
 Click **Deploy**. Once completed, Vercel will assign a production domain (e.g., `https://thai-smart-address-portal.vercel.app`).

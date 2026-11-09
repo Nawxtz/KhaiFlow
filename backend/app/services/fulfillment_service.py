@@ -65,8 +65,7 @@ def _notify_buyer_fulfilled(
             messages=[{"type": "text", "text": msg_text}],
         )
         logger.info(
-            "Sent fulfillment notification to user %s for order %s",
-            order.line_user_id,
+            "Sent fulfillment notification for order %s",
             order.id,
         )
         return True
@@ -74,7 +73,7 @@ def _notify_buyer_fulfilled(
         logger.error(
             "Failed to send LINE fulfillment notification for order %s: %s",
             order.id,
-            exc,
+            type(exc).__name__,
         )
         return False
 
