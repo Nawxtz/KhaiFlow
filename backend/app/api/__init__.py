@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.address_book import router as address_book_router
+from app.api.auth import router as auth_router
 from app.api.export import router as export_router
 from app.api.gateway_webhook import router as gateway_webhook_router
 from app.api.inventory import router as inventory_router
@@ -11,6 +12,7 @@ from app.api.verification import router as verification_router
 from app.api.webhook import router as webhook_router
 
 api_router = APIRouter()
+api_router.include_router(auth_router)
 api_router.include_router(inventory_router)
 api_router.include_router(orders_router)
 api_router.include_router(address_book_router)

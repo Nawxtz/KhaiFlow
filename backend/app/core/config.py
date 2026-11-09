@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     RESERVATION_TTL_SECONDS: int = 600
     TTL_AWAITING_PAYMENT_MINUTES: int = 30
 
+    # Auth Settings (reference_settings.md)
+    SESSION_TTL_HOURS: int = 12
+    LOGIN_RATE_LIMIT: int = 5
+
     # PDPA Settings (reference_settings.md & Phase 10)
     RETENTION_MONTHS: int = 12
     CONSENT_REQUIRED: bool = True

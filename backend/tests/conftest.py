@@ -43,7 +43,7 @@ def clean_db_and_cache():
     with test_engine.connect() as conn:
         conn.execute(
             text(
-                "TRUNCATE TABLE inventory_sheet_snapshot, inventory, user_prefs, orders, order_items, address_book, consumed_payment_claims, payment_events, reservations, verification_logs, pdpa_deletions RESTART IDENTITY CASCADE;"
+                "TRUNCATE TABLE inventory_sheet_snapshot, inventory, user_prefs, orders, order_items, address_book, consumed_payment_claims, payment_events, reservations, verification_logs, pdpa_deletions, users, sessions RESTART IDENTITY CASCADE;"
             )
         )
         # Pre-seed consent for legacy Phase 4 test users to maintain test suite backward compatibility
