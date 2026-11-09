@@ -1080,7 +1080,7 @@ class SmartAddressParser:
         # FIX [P-F4]: Strip trailing bracket/quote punctuation and location connectors from receiver.
         if receiver:
             receiver = re.sub(r"\s+ที่\s*[ก-๙]+.*$", "", receiver).strip()
-            receiver = re.sub(r"^[\s()\[\]{}<>\"'/（）【】［］｛｝]+|[\s()\[\]{}<>\"'/（）【】［］｛｝]+$", "", receiver).strip()
+            receiver = re.sub(r"^[\s,;()\[\]{}<>\"'/（）【】［］｛｝]+|[\s,;()\[\]{}<>\"'/（）【】［］｛｝]+$", "", receiver).strip()
             if len(receiver) < 2 or self._is_name_stop(receiver) or receiver.startswith("ร้านกาแฟ"):
                 receiver = None
 

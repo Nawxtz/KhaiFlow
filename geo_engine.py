@@ -323,12 +323,19 @@ class GeoDatabase:
             and get_prov_matches(r.province)
             for r in pool
         ):
+            cands = self._build_candidate_pool(text, SUB_PFXS, DIST_PFXS, PROV_PFXS)
             full_pool = [
-                r for r in self._build_candidate_pool(text, SUB_PFXS, DIST_PFXS, PROV_PFXS)
+                r for r in cands
                 if get_sub_matches(r.sub_district)
                 and get_dist_matches(r.district, r.province)
                 and get_prov_matches(r.province)
             ]
+            if not full_pool:
+                full_pool = [
+                    r for r in cands
+                    if get_dist_matches(r.district, r.province)
+                    and get_prov_matches(r.province)
+                ]
             if full_pool:
                 pool = full_pool
                 warnings_out.append(f"[ZipMismatch] Zipcode '{zipcode_hint}' does not match typed address")
