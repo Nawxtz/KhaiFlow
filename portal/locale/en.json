@@ -108,5 +108,6 @@
   "inv_loading": "Loading inventory...",
   "inv_error": "Failed to load inventory",
   "currency_thb": "THB",
-  "na": "N/A"
+  "na": "N/A",
+  "demo_banner": "Demonstration system. Not licensed to process payments. Real deployment requires merchant onboarding and legal review."
 }
