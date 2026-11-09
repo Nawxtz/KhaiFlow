@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.security import rate_limit
 from app.schemas.gateway_webhook import GatewayWebhookResponse
 from app.services.gateway_webhook_service import (
     InvalidSignatureError,
@@ -18,11 +19,13 @@ router = APIRouter(tags=["gateway_webhook"])
 
 @router.post(
     "/api/gateway/webhook",
+    dependencies=[Depends(rate_limit("gateway_webhook", 120))],
     response_model=GatewayWebhookResponse,
     status_code=status.HTTP_200_OK,
 )
 @router.post(
     "/api/payment/webhook",
+    dependencies=[Depends(rate_limit("gateway_webhook", 120))],
     response_model=GatewayWebhookResponse,
     status_code=status.HTTP_200_OK,
 )

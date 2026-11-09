@@ -20,6 +20,7 @@ os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 from app.api.webhook import clear_processed_events, get_line_client
 from app.auth.service import _issue_session
 from app.core.database import Base, db_url, get_db
+from app.core.security import reset_rate_limits
 from app.main import app
 from app.models.auth import User
 from app.services.cache import inventory_cache
@@ -43,6 +44,7 @@ def setup_test_database():
 def clean_db_and_cache():
     """Clean database rows and in-memory cache before every test."""
     inventory_cache.clear()
+    reset_rate_limits()
     with test_engine.connect() as conn:
         conn.execute(
             text(

@@ -13,6 +13,7 @@ from app.auth.service import (
     refresh_session,
 )
 from app.core.database import get_db
+from app.core.security import rate_limit
 from app.schemas.auth import (
     ChangePasswordRequest,
     LoginRequest,
@@ -22,6 +23,10 @@ from app.schemas.auth import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+# Per client address. Account lockout separately protects each username.
+LOGIN_REQUESTS_PER_MINUTE = 20
+REFRESH_REQUESTS_PER_MINUTE = 60
 
 
 def _token_response(tokens: IssuedTokens) -> TokenResponse:
@@ -33,7 +38,11 @@ def _token_response(tokens: IssuedTokens) -> TokenResponse:
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("auth_login", LOGIN_REQUESTS_PER_MINUTE))],
+)
 def login_endpoint(req: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     try:
         return _token_response(login(db, req.username, req.password))
@@ -43,7 +52,11 @@ def login_endpoint(req: LoginRequest, db: Session = Depends(get_db)) -> TokenRes
         ) from exc
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[Depends(rate_limit("auth_refresh", REFRESH_REQUESTS_PER_MINUTE))],
+)
 def refresh_endpoint(req: RefreshRequest, db: Session = Depends(get_db)) -> TokenResponse:
     try:
         return _token_response(refresh_session(db, req.refresh_token))
