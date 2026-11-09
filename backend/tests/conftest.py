@@ -16,9 +16,11 @@ TEST_DATABASE_URL = os.getenv(
 # Set environment before loading app
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
+from app.api.webhook import clear_processed_events, get_line_client
 from app.core.database import Base, db_url, get_db
 from app.main import app
 from app.services.cache import inventory_cache
+from tests.fakes import FakeLineClient
 
 test_engine = create_engine(db_url, pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -89,6 +91,17 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fake_line() -> Generator[FakeLineClient, None, None]:
+    """Route the webhook to a recording LINE client, with clean event idempotency state."""
+    fake = FakeLineClient()
+    clear_processed_events()
+    app.dependency_overrides[get_line_client] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_line_client, None)
+    clear_processed_events()
 
 
 class MockSheetsClient:
