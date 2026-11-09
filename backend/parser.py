@@ -707,7 +707,7 @@ class SmartAddressParser:
         text = text.replace("เเ", "แ")
         # Drop Unicode pictographs (So/Sk) and variation selectors
         text = "".join(
-            " " if unicodedata.category(c) in ("So", "Sk")
+            " " if unicodedata.category(c) in ("So", "Sk") and c != "👤"
             else ("" if (0xFE00 <= ord(c) <= 0xFE0F or 0xE0100 <= ord(c) <= 0xE01EF) else c)
             for c in text
         )
@@ -1042,6 +1042,8 @@ class SmartAddressParser:
                             started = True
                             trimmed.append(tok)
                             continue
+                        if tok == "👤":
+                            continue
                         is_stop = self._is_name_stop(tok)
                         if is_stop:
                             if started:
@@ -1080,7 +1082,7 @@ class SmartAddressParser:
         # FIX [P-F4]: Strip trailing bracket/quote punctuation and location connectors from receiver.
         if receiver:
             receiver = re.sub(r"\s+ที่\s*[ก-๙]+.*$", "", receiver).strip()
-            receiver = re.sub(r"^[\s,;()\[\]{}<>\"'/（）【】［］｛｝]+|[\s,;()\[\]{}<>\"'/（）【】［］｛｝]+$", "", receiver).strip()
+            receiver = re.sub(r"^[\s,;()\[\]{}<>\"'/（）【】［］｛｝👤]+|[\s,;()\[\]{}<>\"'/（）【】［］｛｝👤]+$", "", receiver).strip()
             if len(receiver) < 2 or self._is_name_stop(receiver) or receiver.startswith("ร้านกาแฟ"):
                 receiver = None
 
@@ -1100,6 +1102,9 @@ class SmartAddressParser:
             # characters, not digits. We guard quality with token validation below.
             if remaining:
                 tail_m = re.search(
+                    r"👤\s*((?:[^\s\d/]{2,20}\s*){1,2})\s*$",
+                    remaining
+                ) or re.search(
                     r"(?:^|\s)((?:[^\s\d/]{2,20}\s*){1,2})\s*$",
                     remaining
                 )
@@ -1117,7 +1122,8 @@ class SmartAddressParser:
                     )
                     if valid:
                         receiver = candidate
-                        text = remaining[:tail_m.start(1)].rstrip()
+                        cut_idx = tail_m.start() if "👤" in tail_m.group(0) else tail_m.start(1)
+                        text = remaining[:cut_idx].rstrip()
 
         text = re.sub(r"\s+", " ", text).strip()
         address_detail = self._clean_address_detail(text.strip(" ,.-/")) or None
