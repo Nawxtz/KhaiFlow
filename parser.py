@@ -503,6 +503,12 @@ class SmartAddressParser:
                         geo_rec = GeoRecord(sub_district="", district=typed_d, province=geo_rec.province, zipcode=result.zipcode or "")
                         break
 
+        if geo_rec and geo_rec.sub_district and geo_rec.sub_district == geo_rec.district:
+            if not re.search(r"(?<![\u0E00-\u0E7F])(?:ต\.|ตำบล|แขวง|ต\s)\s*" + re.escape(geo_rec.sub_district) + r"(?![\u0E00-\u0E7F])", text):
+                dist_m = re.search(r"(?<![\u0E00-\u0E7F])(?:(?:อ\.|อำเภอ|เขต)\s*)?" + re.escape(geo_rec.district) + r"(?![\u0E00-\u0E7F])", text)
+                if dist_m and re.search(r"(?:^|[^\u0E00-\u0E7F])(?:ถนน|ถ\.|ซอย|ซ\.|ตรอก)", text[:dist_m.start()]):
+                    geo_rec = GeoRecord(sub_district="", district=geo_rec.district, province=geo_rec.province, zipcode=geo_rec.zipcode)
+
         if geo_rec:
             if geo_rec.sub_district and (self._geo._wb_match(geo_rec.sub_district, text) or any(
                 re.search(re.escape(pfx + geo_rec.sub_district) + r"(?![\u0E00-\u0E7F])|" + re.escape(pfx + geo_rec.sub_district) + r"(?=อ\.|อำเภอ|เขต|จ\.|จังหวัด)", text)
@@ -1020,6 +1026,13 @@ class SmartAddressParser:
                     clean_name = _strip_greeting_lead(clean_name)
                     trimmed: List[str] = []
                     started = False
+                    _lm_tail = ""
+                    _lm_toks = clean_name.split()
+                    for _i, _t in enumerate(_lm_toks):
+                        if _i > 0 and _t.startswith(("ตรงข้าม", "ใกล้", "ข้าง", "หลัง")):
+                            _lm_tail = " ".join(_lm_toks[_i:])
+                            clean_name = " ".join(_lm_toks[:_i])
+                            break
                     for tok in clean_name.split():
                         if not started and (
                             tok in ("บริษัท", "บจก", "บ.", "หจก", "ห้างหุ้นส่วน")
@@ -1050,6 +1063,8 @@ class SmartAddressParser:
                         # prefixes (e.g. "แอดมิน") preceded the receiver and were
                         # already skipped in the loop — leaving them in address_detail.
                         text = text[am.start():].strip()
+                        if _lm_tail:
+                            text = f"{_lm_tail} {text}"
             if qty:
                 text = f"{qty} {text}".strip()
 
