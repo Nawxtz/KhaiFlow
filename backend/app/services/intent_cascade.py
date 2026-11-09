@@ -113,7 +113,7 @@ def extract_order_intent_with_stage(
         return intent, "llm"
 
     # All cascade stages failed or had low confidence
-    logger.info("Cascade failed to confidently match intent for text: %s", text[:50])
+    logger.info("Cascade failed to confidently match intent")
     return None, None
 
 

@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_owner
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.inventory import Inventory
@@ -69,7 +70,7 @@ def get_inventory(
     return items
 
 
-@router.post("/sync", response_model=IngestSummary)
+@router.post("/sync", response_model=IngestSummary, dependencies=[Depends(require_owner)])
 def sync_inventory(
     shop_id: Annotated[str | None, Query(description="Shop ID")] = None,
     db: Session = Depends(get_db),

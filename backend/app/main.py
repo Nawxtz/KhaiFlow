@@ -2,85 +2,58 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from alembic.config import Config
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
 
 from alembic import command
 from app.api import api_router
-from app.core.database import SessionLocal, engine
-from app.models import Base
+from app.core.config import check_runtime_settings, settings
+from app.core.security import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def run_migrations_and_seed():
+def run_migrations() -> None:
     if os.getenv("PYTEST_CURRENT_TEST"):
         return
 
+    base_dir = Path(__file__).resolve().parent.parent
+    ini_candidates = [
+        Path("alembic.ini"),
+        base_dir / "alembic.ini",
+        base_dir.parent / "backend" / "alembic.ini",
+    ]
+    ini_path = next((p for p in ini_candidates if p.exists()), None)
+    if ini_path is None:
+        raise RuntimeError("alembic.ini not found; cannot prepare the database schema.")
+
+    logger.info(f"Running Alembic migrations from {ini_path}...")
+    alembic_cfg = Config(str(ini_path))
     try:
-        base_dir = Path(__file__).resolve().parent.parent
-        ini_candidates = [
-            Path("alembic.ini"),
-            base_dir / "alembic.ini",
-            base_dir.parent / "backend" / "alembic.ini",
-        ]
-        ini_path = next((p for p in ini_candidates if p.exists()), None)
-        if ini_path:
-            logger.info(f"Running Alembic migrations from {ini_path}...")
-            alembic_cfg = Config(str(ini_path))
-            try:
-                command.upgrade(alembic_cfg, "head")
-                logger.info("Alembic migrations completed successfully.")
-            except Exception as e_up:
-                if "already exists" in str(e_up).lower():
-                    logger.warning("Tables already exist in database, stamping Alembic revision to head...")
-                    try:
-                        command.stamp(alembic_cfg, "head")
-                    except Exception as e_stamp:
-                        logger.warning(f"Alembic stamp warning: {e_stamp}")
-                else:
-                    raise e_up
-        else:
-            logger.info("alembic.ini not found, creating tables via Base.metadata...")
-            Base.metadata.create_all(bind=engine)
-    except Exception as exc:
-        logger.error(f"Migration error, falling back to Base.metadata: {exc}")
-        try:
-            Base.metadata.create_all(bind=engine)
-        except Exception as e2:
-            logger.error(f"Failed to create tables via metadata: {e2}")
-
-    try:
-        with SessionLocal() as db:
-            result = db.execute(text("SELECT count(*) FROM inventory")).scalar()
-            if result == 0:
-                logger.info("Database empty, auto-seeding demo data...")
-                scripts_dir = base_dir.parent / "scripts"
-                import sys
-
-                if str(scripts_dir) not in sys.path and scripts_dir.exists():
-                    sys.path.insert(0, str(scripts_dir))
-                if str(base_dir) not in sys.path and base_dir.exists():
-                    sys.path.insert(0, str(base_dir))
-                try:
-                    from seed_demo import seed_demo_data
-
-                    seed_demo_data()
-                    logger.info("Demo data seeded successfully.")
-                except ImportError as ie:
-                    logger.warning(f"seed_demo module not found, skipping seed: {ie}")
-    except Exception as exc:
-        logger.warning(f"Auto-seed check: {exc}")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations completed successfully.")
+    except Exception as e_up:
+        if "already exists" not in str(e_up).lower():
+            raise
+        logger.warning("Tables already exist in database, stamping Alembic revision to head...")
+        command.stamp(alembic_cfg, "head")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    run_migrations_and_seed()
+    check_runtime_settings(settings)
+    run_migrations()
     yield
+
+
+def api_docs_urls(app_env: str) -> dict[str, Any]:
+    """Close the interactive API docs and schema in production."""
+    if app_env == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {}
 
 
 app = FastAPI(
@@ -88,15 +61,11 @@ app = FastAPI(
     description="Backend API for KhaiFlow chat commerce system",
     version="1.0.0",
     lifespan=lifespan,
+    **api_docs_urls(settings.APP_ENV),
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(SecurityHeadersMiddleware, production=settings.APP_ENV == "production")
+app.add_middleware(BodySizeLimitMiddleware)
 
 app.include_router(api_router)
 

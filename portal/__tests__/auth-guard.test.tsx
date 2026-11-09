@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import DashboardLayout from "@/app/(dashboard)/layout";
 import { I18nProvider } from "@/context/I18nContext";
 import { ThemeProvider } from "@/context/ThemeContext";
-import { STORAGE_KEY_TOKEN, STORAGE_KEY_USER } from "@/lib/auth";
+import { STORAGE_KEY_USER } from "@/lib/auth";
 
 const mockPush = vi.fn();
 
@@ -42,7 +42,6 @@ describe("Auth Guard in DashboardLayout", () => {
   });
 
   it("renders protected dashboard content when a valid session token exists", async () => {
-    localStorage.setItem(STORAGE_KEY_TOKEN, "valid_mock_token_123");
     localStorage.setItem(
       STORAGE_KEY_USER,
       JSON.stringify({ id: "user_owner", username: "owner", role: "owner" })

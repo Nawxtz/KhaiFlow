@@ -54,9 +54,7 @@ class LineClient:
             messages = [messages]
 
         if not self.channel_access_token:
-            logger.info(
-                "LINE_CHANNEL_ACCESS_TOKEN not set; mocking reply to %s: %s", reply_token, messages
-            )
+            logger.info("LINE_CHANNEL_ACCESS_TOKEN not set; skipping reply")
             return
 
         try:
@@ -80,7 +78,7 @@ class LineClient:
                 )
                 messaging_api.reply_message(request)
         except Exception as e:
-            logger.error("Failed to send LINE reply message: %s", e)
+            logger.error("Failed to send LINE reply message: %s", type(e).__name__)
             raise
 
     def push_message(
@@ -97,9 +95,7 @@ class LineClient:
             messages = [messages]
 
         if not self.channel_access_token:
-            logger.info(
-                "LINE_CHANNEL_ACCESS_TOKEN not set; mocking push to %s: %s", to, messages
-            )
+            logger.info("LINE_CHANNEL_ACCESS_TOKEN not set; skipping push")
             return
 
         try:
@@ -123,7 +119,7 @@ class LineClient:
                 )
                 messaging_api.push_message(request)
         except Exception as e:
-            logger.error("Failed to send LINE push message to %s: %s", to, e)
+            logger.error("Failed to send LINE push message: %s", type(e).__name__)
             raise
 
     def send_message(self, to: str, text: str) -> None:
@@ -151,9 +147,7 @@ class LineClient:
     def link_rich_menu_to_user(self, user_id: str, rich_menu_id: str) -> None:
         """Link a Rich Menu to a specific LINE user."""
         if not self.channel_access_token:
-            logger.info(
-                "LINE_CHANNEL_ACCESS_TOKEN not set; mocking link %s -> %s", rich_menu_id, user_id
-            )
+            logger.info("LINE_CHANNEL_ACCESS_TOKEN not set; skipping rich menu link")
             return
 
         try:
@@ -164,7 +158,7 @@ class LineClient:
                 messaging_api = MessagingApi(api_client)
                 messaging_api.link_rich_menu_id_to_user(user_id, rich_menu_id)
         except Exception as e:
-            logger.error("Failed to link rich menu to user %s: %s", user_id, e)
+            logger.error("Failed to link rich menu: %s", type(e).__name__)
             raise
 
 

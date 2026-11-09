@@ -1,21 +1,14 @@
 import { test, expect } from "@playwright/test";
 import * as fs from "fs";
 import * as path from "path";
+import { loginAs } from "./helpers";
 
 test.describe("RBAC Negative Testing", () => {
   test("Staff role: Export button is disabled in UI and direct export call returns 403", async ({
     page,
-    request,
   }) => {
     // 1. Login with staff credentials
-    await page.goto("/login");
-    await page.locator('[data-testid="input-username"]').fill("staff");
-    await page.locator('[data-testid="input-password"]').fill("password");
-    await page.locator('[data-testid="btn-login"]').click();
-
-    await page.waitForURL("http://localhost:3000/");
-    expect(page.url()).toBe("http://localhost:3000/");
-
+    await loginAs(page, "staff");
     // Verify staff role in localStorage
     const userRaw = await page.evaluate(() => localStorage.getItem("portal_user"));
     expect(userRaw).not.toBeNull();
@@ -35,26 +28,23 @@ test.describe("RBAC Negative Testing", () => {
     const btnTitle = await exportBtn.getAttribute("title");
     expect(btnTitle).toContain("Staff role cannot trigger carrier export");
 
-    // 3. Attempt direct API request: GET /api/export/csv?carrier_id=kerry with staff role
-    const apiRes = await request.get("http://localhost:8000/api/export/csv?carrier_id=kerry", {
-      headers: {
-        "X-User-Role": "staff",
-      },
-    });
+    // 3. Attempt the export through the portal proxy with the staff session
+    const apiRes = await page.request.get("/api/backend/api/export/csv?carrier_id=kerry");
 
-    // Assert backend returns 403 Forbidden
+    // Assert backend returns 403 Forbidden, and a forged role changes nothing
     expect(apiRes.status()).toBe(403);
     const errBody = await apiRes.json();
-    console.log("[RBAC 403 RESPONSE]:", errBody);
-    expect(errBody.detail).toContain(
-      "Staff role cannot trigger carrier export. Owner permission required."
-    );
+    expect(errBody.detail).toContain("Owner permission required");
+    const forged = await page.request.get("/api/backend/api/export/csv?carrier_id=kerry&role=owner", {
+      headers: { "X-User-Role": "owner" },
+    });
+    expect(forged.status()).toBe(403);
 
     // 4. Test navigating directly to export URL as staff in the browser: returns 403 Forbidden
-    const navRes = await page.goto("http://localhost:8000/api/export/csv?carrier_id=kerry&role=staff");
+    const navRes = await page.goto("/api/backend/api/export/csv?carrier_id=kerry");
     expect(navRes?.status()).toBe(403);
     const navBody = await navRes?.json();
-    expect(navBody.detail).toContain("Staff role cannot trigger carrier export");
+    expect(navBody.detail).toContain("Owner permission required");
 
     // Return to dashboard and ensure UI is healthy and intact
     await page.goto("/");
@@ -83,29 +73,17 @@ test.describe("RBAC Negative Testing", () => {
     );
   });
 
-  test("Owner role: Export button is enabled in UI and export succeeds", async ({
-    page,
-    request,
-  }) => {
+  test("Owner role: Export button is enabled in UI and export succeeds", async ({ page }) => {
     // Login with owner credentials
-    await page.goto("/login");
-    await page.locator('[data-testid="input-username"]').fill("owner");
-    await page.locator('[data-testid="input-password"]').fill("password");
-    await page.locator('[data-testid="btn-login"]').click();
-
-    await page.waitForURL("http://localhost:3000/");
+    await loginAs(page, "owner");
 
     // Assert export button is enabled for owner
     const exportBtn = page.locator('[data-testid="btn-export-csv"]');
     await expect(exportBtn).toBeVisible();
     await expect(exportBtn).toBeEnabled();
 
-    // Call export API directly as owner
-    const apiRes = await request.get("http://localhost:8000/api/export/csv?carrier_id=kerry", {
-      headers: {
-        "X-User-Role": "owner",
-      },
-    });
+    // Call export through the portal proxy as owner
+    const apiRes = await page.request.get("/api/backend/api/export/csv?carrier_id=kerry");
 
     expect(apiRes.status()).toBe(200);
     const contentType = apiRes.headers()["content-type"];

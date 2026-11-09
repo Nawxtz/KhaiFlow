@@ -1,14 +1,15 @@
 # KhaiFlow — LINE Commerce Bot
 
+> **Demonstration system. Not licensed to process payments. Real deployment requires merchant onboarding and legal review.**
+
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-14_App_Router-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![LINE Bot SDK](https://img.shields.io/badge/LINE_Bot_SDK-v3-00C300?logo=line&logoColor=white)](https://developers.line.biz/)
-[![PDPA Compliant](https://img.shields.io/badge/PDPA-Compliant-success)](#pdpa-privacy--data-retention)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> KhaiFlow is a production-grade conversational e-commerce engine for LINE Official Accounts that transforms unstructured Thai delivery addresses into validated orders with atomic stock reservations, HMAC-signed PromptPay QR payments, and bilingual seller operations.
+> KhaiFlow is a conversational e-commerce engine in development for LINE Official Accounts that transforms unstructured Thai delivery addresses into validated orders with atomic stock reservations, HMAC-signed PromptPay QR payments, and bilingual seller operations.
 
 <!-- add demo screenshot here -->
 
@@ -52,7 +53,7 @@ graph TD
 | **LINE integration** | LINE Bot SDK v3 |
 | **Address parsing** | ThaiSmartAddress (local/offline) |
 | **Free-text search** | RapidFuzz + TF-IDF + OpenRouter LLM |
-| **Payment QR** | PromptPay EMVCo + HMAC-SHA256 |
+| **Payment QR** | HMAC-SHA256 signed payment reference (real PromptPay EMVCo is planned) |
 | **Seller portal** | Next.js 14 App Router, TypeScript, Tailwind CSS |
 | **i18n** | EN / TH (100% key parity across bot and portal) |
 | **Tests** | pytest (124 backend) + Vitest (14 portal) |
@@ -63,7 +64,7 @@ graph TD
 
 - **Atomic Stock Reservation:** Uses atomic conditional `UPDATE inventory SET reserved=reserved+:qty WHERE (stock-reserved) >= :qty` to guarantee zero overselling under high concurrency without fragile SELECT-then-UPDATE race conditions.
 - **PostgreSQL Concurrency Proof:** Verified with `threading.Barrier(2)` concurrent race tests executing against real PostgreSQL instances, proving exactly-one-wins stock reservation.
-- **HMAC-SHA256 Signed Payment QR:** Dynamic PromptPay EMVCo payload generation signed with HMAC-SHA256; validated via `hmac.compare_digest` to prevent parameter tampering and timing attacks.
+- **HMAC-SHA256 Signed Payment QR:** Signed payment reference (real PromptPay EMVCo is planned); validated via `hmac.compare_digest` to prevent parameter tampering and timing attacks.
 - **Zero-Query Webhook Security:** Enforces strict LINE signature verification at the webhook entry point; proven via SQLAlchemy event listeners to execute zero DB queries on invalid signatures.
 - **3-Stage Free-Text Cascade:** Graceful intent extraction falling back from RapidFuzz string distance to TF-IDF semantic search, then OpenRouter LLM extraction equipped with Pydantic `extra="forbid"` injection guards.
 - **Lock-Free Batch Expiries:** Batch background operations (TTL releases, PDPA data purges) employ `SELECT ... FOR UPDATE SKIP LOCKED` for reliable worker parallelism.
@@ -105,6 +106,14 @@ make ci
 
 # Frontend Vitest suite (14 portal tests)
 npm test
+```
+
+### Create a Portal Account
+
+Run from `backend/`; the command asks for a password of at least 12 characters:
+
+```bash
+python -m app.auth.cli create-user <username> --role owner
 ```
 
 ### 5. Seed Demo Data (Optional)
@@ -175,7 +184,8 @@ python scripts/seed_demo.py
 | `UI_DEFAULT_PORTAL_LANGUAGE` | UX | Default language for seller portal (`en` or `th`) | Optional (default: `en`) |
 | `UI_DEFAULT_THEME` | UX | Default theme mode for portal (`system`, `light`, `dark`) | Optional (default: `system`) |
 | `UI_THEME_SELECTABLE` | UX | Allow sellers to toggle portal color theme | Optional (default: `true`) |
-| `NEXT_PUBLIC_API_BASE_URL` | Portal | Public backend REST API URL accessed by portal | **Required for Portal** |
+| `BACKEND_URL` | Portal | Backend URL, read only on the portal server | **Required for Portal** |
+| `APP_ENV` | Backend | `development` or `production`; production refuses to start without its secrets | Optional (default: `development`) |
 
 ---
 

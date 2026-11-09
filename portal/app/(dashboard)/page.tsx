@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
-import { api, Order, API_BASE_URL } from "@/lib/api";
+import { api, Order, API_BASE_PATH } from "@/lib/api";
 import { useI18n } from "@/context/I18nContext";
 import { getUser, UserSession } from "@/lib/auth";
 import OrderTable from "@/components/OrderTable";
@@ -35,12 +35,7 @@ export default function OrderDashboardPage() {
     setExportError(null);
     setExportSuccess(null);
     try {
-      const role = user?.role || "staff";
-      const res = await fetch(`${API_BASE_URL}/api/export/csv?carrier_id=${carrierId}`, {
-        headers: {
-          "X-User-Role": role,
-        },
-      });
+      const res = await fetch(`${API_BASE_PATH}/api/export/csv?carrier_id=${carrierId}`);
       if (!res.ok) {
         let msg = `Export failed with status ${res.status}`;
         try {

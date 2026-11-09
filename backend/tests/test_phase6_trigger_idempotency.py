@@ -2,7 +2,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
 
-from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app.models.inventory import Inventory
@@ -201,44 +200,28 @@ def test_concurrent_identical_triggers_exactly_one_claim_inserted():
         assert len(claims) == 1
 
 
-def test_api_payment_trigger_endpoint_idempotency(client: TestClient):
+def test_payment_trigger_service_idempotency():
     """
-    Test /api/payment/trigger endpoint:
-    - Initial webhook delivery returns 200 with is_duplicate=False.
-    - Retried delivery returns 200 with is_duplicate=True.
+    The trigger is no longer exposed over HTTP (P0-4); the service keeps its guarantee:
+    - First delivery is processed with is_duplicate=False.
+    - Retried delivery is reported with is_duplicate=True.
     """
     order_id = "ORD-API-TRIGGER-001"
     seed_order_awaiting_payment(order_id=order_id)
-    claim_key = "ref:API-TXN-999"
+    delivery = {
+        "claim_key": "ref:API-TXN-999",
+        "order_id": order_id,
+        "shop_id": "default",
+        "channel": "webhook",
+        "payload_json": {"source": "gateway_webhook"},
+    }
 
-    # First call
-    res1 = client.post(
-        "/api/payment/trigger",
-        json={
-            "claim_key": claim_key,
-            "order_id": order_id,
-            "shop_id": "default",
-            "channel": "webhook",
-            "payload": {"source": "gateway_webhook"},
-        },
-    )
-    assert res1.status_code == 200
-    data1 = res1.json()
-    assert data1["status"] == "processed"
-    assert data1["is_duplicate"] is False
+    with TestingSessionLocal() as session:
+        first = process_payment_trigger(db=session, **delivery)
+    with TestingSessionLocal() as session:
+        second = process_payment_trigger(db=session, **delivery)
 
-    # Second call with same claim_key
-    res2 = client.post(
-        "/api/payment/trigger",
-        json={
-            "claim_key": claim_key,
-            "order_id": order_id,
-            "shop_id": "default",
-            "channel": "webhook",
-            "payload": {"source": "gateway_webhook"},
-        },
-    )
-    assert res2.status_code == 200
-    data2 = res2.json()
-    assert data2["status"] == "duplicate"
-    assert data2["is_duplicate"] is True
+    assert first.status == "processed"
+    assert first.is_duplicate is False
+    assert second.status == "duplicate"
+    assert second.is_duplicate is True

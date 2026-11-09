@@ -118,7 +118,7 @@ def _notify_buyer(
     try:
         client.send_message(to=order.line_user_id, text=msg_text)
     except Exception as exc:
-        logger.error("Failed to notify buyer via LINE for order %s: %s", order.id, exc)
+        logger.error("Failed to notify buyer via LINE for order %s: %s", order.id, type(exc).__name__)
 
 
 def process_gateway_webhook(
@@ -169,7 +169,7 @@ def process_gateway_webhook(
         raw_text = raw_body.decode("utf-8")
         payload_dict = json.loads(raw_text)
     except Exception as exc:
-        logger.warning("Failed to decode webhook JSON body: %s", exc)
+        logger.warning("Failed to decode webhook JSON body: %s", type(exc).__name__)
         if raise_on_error:
             raise MalformedPayloadError(f"Malformed webhook JSON body: {exc}") from exc
         return WebhookResult(
@@ -184,7 +184,7 @@ def process_gateway_webhook(
     try:
         payload = GatewayWebhookPayload.model_validate(payload_dict)
     except ValidationError as exc:
-        logger.warning("Gateway webhook payload validation failed: %s", exc)
+        logger.warning("Gateway webhook payload validation failed: %s", type(exc).__name__)
         if raise_on_error:
             raise MalformedPayloadError(f"Payload schema validation error: {exc}") from exc
         return WebhookResult(

@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
-import { clearSession, getUser, UserSession } from "@/lib/auth";
+import { getUser, logout, UserSession } from "@/lib/auth";
 
 export default function Navbar() {
   const { t } = useI18n();
@@ -18,8 +18,8 @@ export default function Navbar() {
     setUser(getUser());
   }, []);
 
-  const handleLogout = () => {
-    clearSession();
+  const handleLogout = async () => {
+    await logout();
     router.push("/login");
   };
 

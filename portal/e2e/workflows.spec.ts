@@ -1,17 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { loginAs } from "./helpers";
 import * as path from "path";
 import * as fs from "fs";
 
 test.describe("Core Workflows & API Integration", () => {
   test.beforeEach(async ({ page }) => {
     // Authenticate as owner before each test
-    await page.addInitScript(() => {
-      localStorage.setItem("portal_session_token", "mock_session_token_workflow_test");
-      localStorage.setItem(
-        "portal_user",
-        JSON.stringify({ id: "seller_owner", username: "owner", role: "owner" })
-      );
-    });
+    await loginAs(page, "owner");
   });
 
   test("Dashboard Load: renders order table and verified status badge colours", async ({ page }) => {

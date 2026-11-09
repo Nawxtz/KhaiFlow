@@ -27,6 +27,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r backend/requirements.txt
+      - run: bash scripts/check_no_secrets.sh
       - run: bash scripts/check_parser_sync.sh
       - run: python -m pytest -q -p no:cacheprovider tests_eval
       - run: make ci
@@ -45,7 +46,70 @@ jobs:
           cache-dependency-path: portal/package-lock.json
       - run: npm ci
         working-directory: portal
+      - run: npm run typecheck
+        working-directory: portal
       - run: npm test
         working-directory: portal
       - run: npm run build
         working-directory: portal
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: app_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/app_test
+      BACKEND_URL: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: portal/package-lock.json
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci
+        working-directory: portal
+      - run: npx playwright install --with-deps chromium
+        working-directory: portal
+      - run: bash portal/e2e/setup_backend.sh
+      - run: npm run build
+        working-directory: portal
+      - run: uvicorn app.main:app --port 8000 &
+        working-directory: backend
+      - run: npm run start &
+        working-directory: portal
+      - run: timeout 60 bash -c 'until curl -sf localhost:8000/health && curl -sf localhost:3000/login; do sleep 1; done'
+      - run: npx playwright test
+        working-directory: portal
+
+  dependency-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pip install pip-audit
+      - run: pip-audit -r backend/requirements.txt
+      # Report only until the Next.js major upgrade is decided; a failure here would stop every merge.
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: portal
+        continue-on-error: true

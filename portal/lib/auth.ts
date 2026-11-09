@@ -1,3 +1,5 @@
+import { csrfHeaders } from "@/lib/csrf";
+
 export type UserRole = "owner" | "staff";
 
 export interface UserSession {
@@ -6,17 +8,7 @@ export interface UserSession {
   role: UserRole;
 }
 
-export const STORAGE_KEY_TOKEN = "portal_session_token";
 export const STORAGE_KEY_USER = "portal_user";
-
-export function getToken(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return localStorage.getItem(STORAGE_KEY_TOKEN);
-  } catch {
-    return null;
-  }
-}
 
 export function getUser(): UserSession | null {
   if (typeof window === "undefined") return null;
@@ -29,10 +21,9 @@ export function getUser(): UserSession | null {
   }
 }
 
-export function setSession(token: string, user: UserSession): void {
+function rememberUser(user: UserSession): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(STORAGE_KEY_TOKEN, token);
     localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
   } catch {
     // ignore
@@ -42,7 +33,6 @@ export function setSession(token: string, user: UserSession): void {
 export function clearSession(): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.removeItem(STORAGE_KEY_TOKEN);
     localStorage.removeItem(STORAGE_KEY_USER);
   } catch {
     // ignore
@@ -50,31 +40,24 @@ export function clearSession(): void {
 }
 
 export function isAuthenticated(): boolean {
-  return Boolean(getToken());
+  return Boolean(getUser());
 }
 
-export async function login(
-  username: string,
-  password: string
-): Promise<{ token: string; user: UserSession }> {
-  // Simulate network latency
-  await new Promise((resolve) => setTimeout(resolve, 50));
-
-  const trimmedUsername = username.trim().toLowerCase();
-  if (
-    (trimmedUsername === "owner" && password === "password") ||
-    (trimmedUsername === "staff" && password === "password")
-  ) {
-    const role: UserRole = trimmedUsername === "owner" ? "owner" : "staff";
-    const user: UserSession = {
-      id: `seller_${trimmedUsername}`,
-      username: trimmedUsername,
-      role,
-    };
-    const token = `mock_session_token_${Date.now()}_${trimmedUsername}`;
-    setSession(token, user);
-    return { token, user };
+export async function login(username: string, password: string): Promise<UserSession> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: username.trim(), password }),
+  });
+  if (!response.ok) {
+    throw new Error("INVALID_CREDENTIALS");
   }
+  const { user } = (await response.json()) as { user: UserSession };
+  rememberUser(user);
+  return user;
+}
 
-  throw new Error("INVALID_CREDENTIALS");
+export async function logout(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST", headers: csrfHeaders() }).catch(() => undefined);
+  clearSession();
 }

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth.deps import CurrentUser, require_owner
 from app.core.database import get_db
 from app.models.order import Order
 from app.schemas.verification import (
@@ -145,13 +146,15 @@ def verify_slip_endpoint(
 def manual_approve_endpoint(
     order_id: str,
     req: ManualApprovalRequest,
+    current: CurrentUser = Depends(require_owner),
     db: Session = Depends(get_db),
 ) -> ManualActionResponse:
     """Option B seller manual approval endpoint."""
     try:
         order = approve_manual(
             order_id=order_id,
-            reviewer_id=req.reviewer_id,
+            reviewer_id=current.username,
+            actor_user_id=current.id,
             db=db,
         )
         return ManualActionResponse(
@@ -171,13 +174,15 @@ def manual_approve_endpoint(
 def manual_reject_endpoint(
     order_id: str,
     req: ManualRejectRequest,
+    current: CurrentUser = Depends(require_owner),
     db: Session = Depends(get_db),
 ) -> ManualActionResponse:
     """Option B seller manual rejection endpoint."""
     try:
         order = reject_manual(
             order_id=order_id,
-            reviewer_id=req.reviewer_id,
+            reviewer_id=current.username,
+            actor_user_id=current.id,
             reason=req.reason,
             db=db,
         )

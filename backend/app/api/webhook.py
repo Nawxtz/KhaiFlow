@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.line_client import LineClient, line_client
+from app.core.security import rate_limit
 from app.schemas.webhook import LineWebhookEvent, LineWebhookPayload
 from app.services.intent_router import dispatch_event
 
@@ -27,7 +28,11 @@ def get_line_client() -> LineClient:
     return line_client
 
 
-@router.post("/webhook", status_code=status.HTTP_200_OK)
+@router.post(
+    "/webhook",
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(rate_limit("line_webhook", 600))],
+)
 async def line_webhook(
     request: Request,
     x_line_signature: str | None = Header(None, alias="X-Line-Signature"),
@@ -57,7 +62,7 @@ async def line_webhook(
             payload_data = json.loads(body.decode("utf-8"))
             payload = LineWebhookPayload(**payload_data)
         except Exception as e:
-            logger.error("Failed to parse LINE webhook payload: %s", e)
+            logger.error("Failed to parse LINE webhook payload: %s", type(e).__name__)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Malformed webhook payload",
@@ -88,6 +93,11 @@ async def _process_single_event(
         logger.info("Duplicate webhook event ID %s ignored", event_id)
         return
     _PROCESSED_EVENT_IDS.add(event_id)
+
+    # The bot serves one-to-one chats only; group and room messages may hold other people's data
+    if event.source is None or event.source.type != "user":
+        logger.info("Ignored non-user event source (event_id=%s)", event_id)
+        return
 
     # Ignore unsupported event types safely
     if event.type not in ("message", "postback"):

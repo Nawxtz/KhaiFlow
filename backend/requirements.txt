@@ -14,3 +14,4 @@ ruff==0.17.3
 mypy==2.4.1
 line-bot-sdk==3.27.0
 rapidfuzz==3.14.6
+argon2-cffi==25.1.0
