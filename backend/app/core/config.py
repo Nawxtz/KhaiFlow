@@ -8,6 +8,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # Runtime environment: development | production
+    APP_ENV: str = "development"
+
     # Database
     DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/app_dev"
 

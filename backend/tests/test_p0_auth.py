@@ -29,8 +29,8 @@ def owner(db_session: Session) -> User:
     return create_user(db_session, "owner_a", PASSWORD, "owner")
 
 
-def _login(client: TestClient, password: str = PASSWORD):
-    return client.post("/api/auth/login", json={"username": "owner_a", "password": password})
+def _login(anon_client: TestClient, password: str = PASSWORD):
+    return anon_client.post("/api/auth/login", json={"username": "owner_a", "password": password})
 
 
 def _bearer(token: str) -> dict[str, str]:
@@ -42,42 +42,42 @@ def test_password_is_stored_as_argon2id(owner: User):
     assert PASSWORD not in owner.password_hash
 
 
-def test_login_returns_tokens_and_me_works(client: TestClient, owner: User):
-    response = _login(client)
+def test_login_returns_tokens_and_me_works(anon_client: TestClient, owner: User):
+    response = _login(anon_client)
 
     assert response.status_code == 200
     body = response.json()
     assert body["user"] == {"id": owner.id, "username": "owner_a", "role": "owner"}
-    me = client.get("/api/auth/me", headers=_bearer(body["access_token"]))
+    me = anon_client.get("/api/auth/me", headers=_bearer(body["access_token"]))
     assert me.json()["username"] == "owner_a"
 
 
-def test_tokens_are_stored_only_as_hashes(client: TestClient, owner: User, db_session: Session):
-    body = _login(client).json()
+def test_tokens_are_stored_only_as_hashes(anon_client: TestClient, owner: User, db_session: Session):
+    body = _login(anon_client).json()
 
     row = db_session.execute(select(AuthSession)).scalars().one()
     assert body["access_token"] not in (row.token_hash, row.refresh_hash)
     assert body["refresh_token"] not in (row.token_hash, row.refresh_hash)
 
 
-def test_wrong_password_and_unknown_user_look_the_same(client: TestClient, owner: User):
-    wrong = _login(client, "wrong password here")
-    unknown = client.post("/api/auth/login", json={"username": "nobody", "password": PASSWORD})
+def test_wrong_password_and_unknown_user_look_the_same(anon_client: TestClient, owner: User):
+    wrong = _login(anon_client, "wrong password here")
+    unknown = anon_client.post("/api/auth/login", json={"username": "nobody", "password": PASSWORD})
 
     assert wrong.status_code == unknown.status_code == 401
     assert wrong.json() == unknown.json()
 
 
-def test_me_requires_a_valid_token(client: TestClient):
-    assert client.get("/api/auth/me").status_code == 401
-    assert client.get("/api/auth/me", headers=_bearer("nonsense")).status_code == 401
+def test_me_requires_a_valid_token(anon_client: TestClient):
+    assert anon_client.get("/api/auth/me").status_code == 401
+    assert anon_client.get("/api/auth/me", headers=_bearer("nonsense")).status_code == 401
 
 
-def test_logout_ends_the_session(client: TestClient, owner: User):
-    headers = _bearer(_login(client).json()["access_token"])
+def test_logout_ends_the_session(anon_client: TestClient, owner: User):
+    headers = _bearer(_login(anon_client).json()["access_token"])
 
-    assert client.post("/api/auth/logout", headers=headers).status_code == 204
-    assert client.get("/api/auth/me", headers=headers).status_code == 401
+    assert anon_client.post("/api/auth/logout", headers=headers).status_code == 204
+    assert anon_client.get("/api/auth/me", headers=headers).status_code == 401
 
 
 def test_session_expires_after_configured_ttl(owner: User, db_session: Session):
@@ -90,16 +90,16 @@ def test_session_expires_after_configured_ttl(owner: User, db_session: Session):
         resolve_session(db_session, tokens.access_token, now_fn=lambda: start + ttl)
 
 
-def test_refresh_rotation_invalidates_the_old_tokens(client: TestClient, owner: User):
-    first = _login(client).json()
+def test_refresh_rotation_invalidates_the_old_tokens(anon_client: TestClient, owner: User):
+    first = _login(anon_client).json()
 
-    second = client.post("/api/auth/refresh", json={"refresh_token": first["refresh_token"]})
-    reused = client.post("/api/auth/refresh", json={"refresh_token": first["refresh_token"]})
+    second = anon_client.post("/api/auth/refresh", json={"refresh_token": first["refresh_token"]})
+    reused = anon_client.post("/api/auth/refresh", json={"refresh_token": first["refresh_token"]})
 
     assert second.status_code == 200
     assert reused.status_code == 401
-    assert client.get("/api/auth/me", headers=_bearer(first["access_token"])).status_code == 401
-    me = client.get("/api/auth/me", headers=_bearer(second.json()["access_token"]))
+    assert anon_client.get("/api/auth/me", headers=_bearer(first["access_token"])).status_code == 401
+    me = anon_client.get("/api/auth/me", headers=_bearer(second.json()["access_token"]))
     assert me.status_code == 200
 
 
@@ -144,42 +144,42 @@ def test_failed_attempts_below_threshold_do_not_lock(owner: User, db_session: Se
 
 
 def test_inactive_user_cannot_login_and_loses_sessions(
-    client: TestClient, owner: User, db_session: Session
+    anon_client: TestClient, owner: User, db_session: Session
 ):
-    headers = _bearer(_login(client).json()["access_token"])
+    headers = _bearer(_login(anon_client).json()["access_token"])
 
     owner.active = False
     db_session.commit()
 
-    assert client.get("/api/auth/me", headers=headers).status_code == 401
-    assert _login(client).status_code == 401
+    assert anon_client.get("/api/auth/me", headers=headers).status_code == 401
+    assert _login(anon_client).status_code == 401
 
 
-def test_change_password_keeps_this_session_and_ends_others(client: TestClient, owner: User):
-    this_session = _bearer(_login(client).json()["access_token"])
-    other_session = _bearer(_login(client).json()["access_token"])
+def test_change_password_keeps_this_session_and_ends_others(anon_client: TestClient, owner: User):
+    this_session = _bearer(_login(anon_client).json()["access_token"])
+    other_session = _bearer(_login(anon_client).json()["access_token"])
 
-    response = client.post(
+    response = anon_client.post(
         "/api/auth/change-password",
         json={"current_password": PASSWORD, "new_password": OTHER_PASSWORD},
         headers=this_session,
     )
 
     assert response.status_code == 204
-    assert client.get("/api/auth/me", headers=this_session).status_code == 200
-    assert client.get("/api/auth/me", headers=other_session).status_code == 401
-    assert _login(client, OTHER_PASSWORD).status_code == 200
+    assert anon_client.get("/api/auth/me", headers=this_session).status_code == 200
+    assert anon_client.get("/api/auth/me", headers=other_session).status_code == 401
+    assert _login(anon_client, OTHER_PASSWORD).status_code == 200
 
 
-def test_change_password_rejects_wrong_current_and_short_new(client: TestClient, owner: User):
-    headers = _bearer(_login(client).json()["access_token"])
+def test_change_password_rejects_wrong_current_and_short_new(anon_client: TestClient, owner: User):
+    headers = _bearer(_login(anon_client).json()["access_token"])
 
-    wrong = client.post(
+    wrong = anon_client.post(
         "/api/auth/change-password",
         json={"current_password": "not the password", "new_password": OTHER_PASSWORD},
         headers=headers,
     )
-    short = client.post(
+    short = anon_client.post(
         "/api/auth/change-password",
         json={"current_password": PASSWORD, "new_password": "short"},
         headers=headers,

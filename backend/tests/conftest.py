@@ -1,10 +1,11 @@
 import os
 from collections.abc import Generator
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 # Pinned test database URL (PostgreSQL required)
@@ -17,8 +18,10 @@ TEST_DATABASE_URL = os.getenv(
 os.environ["DATABASE_URL"] = TEST_DATABASE_URL
 
 from app.api.webhook import clear_processed_events, get_line_client
+from app.auth.service import _issue_session
 from app.core.database import Base, db_url, get_db
 from app.main import app
+from app.models.auth import User
 from app.services.cache import inventory_cache
 from tests.fakes import FakeLineClient
 
@@ -79,8 +82,21 @@ def db_session() -> Generator[Session, None, None]:
         session.close()
 
 
+def auth_headers(db: Session, role: str) -> dict[str, str]:
+    """Create or reuse a user with the role and return headers for a new real session."""
+    username = f"test_{role}"
+    user = db.execute(select(User).where(User.username == username)).scalars().first()
+    if user is None:
+        user = User(username=username, password_hash="unused-in-tests", role=role)
+        db.add(user)
+        db.flush()
+    tokens = _issue_session(db, user, datetime.now(UTC))
+    db.commit()
+    return {"Authorization": f"Bearer {tokens.access_token}"}
+
+
 @pytest.fixture
-def client(db_session: Session) -> Generator[TestClient, None, None]:
+def anon_client(db_session: Session) -> Generator[TestClient, None, None]:
     def override_get_db():
         try:
             yield db_session
@@ -91,6 +107,13 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(anon_client: TestClient, db_session: Session) -> TestClient:
+    """Client logged in as an owner through the real session check."""
+    anon_client.headers.update(auth_headers(db_session, "owner"))
+    return anon_client
 
 
 @pytest.fixture

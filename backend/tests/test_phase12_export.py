@@ -43,6 +43,7 @@ from app.services.export_service import (
     export_fulfilled_orders,
     load_carrier_config,
 )
+from tests.conftest import auth_headers
 
 
 def _create_sample_fulfilled_order(
@@ -404,14 +405,14 @@ def test_transformers():
 # ==============================================================================
 
 
-def test_rbac_staff_cannot_trigger_owner_only_export(client: TestClient):
+def test_rbac_staff_cannot_trigger_owner_only_export(client: TestClient, db_session: Session):
     """TEST_PLAN.md: Staff cannot trigger an owner-only export."""
     res = client.get(
         "/api/export/csv?carrier_id=kerry&shop_id=default",
-        headers={"X-User-Role": "staff"},
+        headers=auth_headers(db_session, "staff"),
     )
     assert res.status_code == 403
-    assert "Staff role cannot trigger carrier export" in res.json()["detail"]
+    assert "Owner permission required" in res.json()["detail"]
 
 
 def test_rbac_owner_can_trigger_export(client: TestClient, db_session: Session):

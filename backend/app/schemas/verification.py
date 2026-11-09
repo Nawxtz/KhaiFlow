@@ -32,7 +32,7 @@ class ManualApprovalRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    reviewer_id: str = Field(..., description="ID or username of the reviewer/seller")
+    reviewer_id: str | None = Field(None, description="Ignored; the reviewer comes from the session")
 
 
 class ManualRejectRequest(BaseModel):
@@ -40,7 +40,7 @@ class ManualRejectRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    reviewer_id: str = Field(..., description="ID or username of the reviewer/seller")
+    reviewer_id: str | None = Field(None, description="Ignored; the reviewer comes from the session")
     reason: str = Field(..., description="Rejection reason")
 
 

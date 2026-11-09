@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.auth.deps import require_owner
 from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.pdpa import (
@@ -65,7 +66,12 @@ def get_pdpa_consent(
     )
 
 
-@router.post("/delete", response_model=PDPADeleteResponse, status_code=status.HTTP_200_OK)
+@router.post(
+    "/delete",
+    response_model=PDPADeleteResponse,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_owner)],
+)
 def delete_user_pdpa_data(
     payload: PDPADeleteRequest,
     db: Session = Depends(get_db),
@@ -91,7 +97,11 @@ def delete_user_pdpa_data(
     )
 
 
-@router.post("/retention", response_model=PDPARetentionJobResponse)
+@router.post(
+    "/retention",
+    response_model=PDPARetentionJobResponse,
+    dependencies=[Depends(require_owner)],
+)
 def trigger_retention_job(
     retention_months: int | None = Query(None, description="Override retention months"),
     shop_id: str | None = Query(None, description="Shop identifier"),

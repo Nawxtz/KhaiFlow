@@ -2,6 +2,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from alembic.config import Config
 from fastapi import FastAPI
@@ -10,6 +11,7 @@ from sqlalchemy import text
 
 from alembic import command
 from app.api import api_router
+from app.core.config import settings
 from app.core.database import SessionLocal, engine
 from app.models import Base
 
@@ -83,11 +85,19 @@ async def lifespan(app: FastAPI):
     yield
 
 
+def api_docs_urls(app_env: str) -> dict[str, Any]:
+    """Close the interactive API docs and schema in production."""
+    if app_env == "production":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {}
+
+
 app = FastAPI(
     title="KhaiFlow Commerce API",
     description="Backend API for KhaiFlow chat commerce system",
     version="1.0.0",
     lifespan=lifespan,
+    **api_docs_urls(settings.APP_ENV),
 )
 
 app.add_middleware(
