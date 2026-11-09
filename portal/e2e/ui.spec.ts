@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { loginAs } from "./helpers";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -58,15 +59,8 @@ test.describe("UI/UX: i18n & Themes", () => {
 
   test("Language Toggle: default Thai to English, persistence across reload, and DOM snapshot", async ({ page }) => {
     // Authenticate as owner so we can verify navigation and full dashboard DOM
-    await page.goto("/login");
-    await page.evaluate(() => {
-      localStorage.setItem("portal_session_token", "mock_session_token_ui_test");
-      localStorage.setItem(
-        "portal_user",
-        JSON.stringify({ id: "seller_owner", username: "owner", role: "owner" })
-      );
-      localStorage.removeItem("user_prefs_language");
-    });
+    await loginAs(page, "owner");
+    await page.evaluate(() => localStorage.removeItem("user_prefs_language"));
 
     await page.goto("/");
     await expect(page.locator("table")).toBeVisible({ timeout: 10000 });

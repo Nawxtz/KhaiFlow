@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import * as path from "path";
+import { E2E_PASSWORD } from "./helpers";
 
 test.describe("Auth Guard & Security", () => {
   test.beforeEach(async ({ page }) => {
@@ -32,7 +33,7 @@ test.describe("Auth Guard & Security", () => {
     await expect(page.locator('[data-testid="input-username"]')).toBeVisible();
   });
 
-  test("Login with owner credentials redirects to Dashboard and persists session token", async ({ page }) => {
+  test("Login with owner credentials redirects to Dashboard and keeps tokens in httpOnly cookies", async ({ page }) => {
     await page.goto("/login");
 
     // Capture network requests during login
@@ -49,20 +50,20 @@ test.describe("Auth Guard & Security", () => {
 
     // Fill credentials
     await page.locator('[data-testid="input-username"]').fill("owner");
-    await page.locator('[data-testid="input-password"]').fill("password");
+    await page.locator('[data-testid="input-password"]').fill(E2E_PASSWORD);
     await page.locator('[data-testid="btn-login"]').click();
 
     // Assert successful redirect to dashboard
     await page.waitForURL("http://localhost:3000/");
     expect(page.url()).toBe("http://localhost:3000/");
 
-    // Verify valid session token and user info persist in localStorage
-    const token = await page.evaluate(() => localStorage.getItem("portal_session_token"));
+    // Tokens live only in httpOnly cookies; localStorage holds display data and no token
+    const stored = await page.evaluate(() => JSON.stringify(localStorage));
+    expect(stored).not.toContain("token");
+    const cookies = await page.context().cookies();
+    expect(cookies.find((c) => c.name === "kf_access")?.httpOnly).toBe(true);
+    expect(cookies.find((c) => c.name === "kf_refresh")?.httpOnly).toBe(true);
     const userRaw = await page.evaluate(() => localStorage.getItem("portal_user"));
-
-    expect(token).not.toBeNull();
-    expect(token).toContain("mock_session_token");
-    expect(token).toContain("owner");
 
     expect(userRaw).not.toBeNull();
     const user = JSON.parse(userRaw!);

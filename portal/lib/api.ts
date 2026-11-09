@@ -1,3 +1,6 @@
+import { clearSession } from "@/lib/auth";
+import { csrfHeaders } from "@/lib/csrf";
+
 export interface OrderItem {
   id: number;
   order_id: string;
@@ -60,14 +63,14 @@ export class ApiError extends Error {
   }
 }
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+export const API_BASE_PATH = "/api/backend";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE_URL}${path}`;
+  const url = `${API_BASE_PATH}${path}`;
   const headers = {
     "Content-Type": "application/json",
     Accept: "application/json",
+    ...csrfHeaders(),
     ...options.headers,
   };
 
@@ -75,6 +78,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...options,
     headers,
   });
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    clearSession();
+    window.location.assign("/login");
+  }
 
   if (!response.ok) {
     let detail = response.statusText;
